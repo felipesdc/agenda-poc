@@ -1,0 +1,102 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Enums garantem integridade dos estados e tipos
+enum Role {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum TaskStatus {
+  PENDING
+  COMPLETED
+  VALIDATED
+}
+
+enum UrgencyLevel {
+  NORMAL
+  WARNING
+  CRITICAL
+}
+
+// Adicionar ENUM de Periodicidade
+enum Frequency {
+  NONE
+  WEEKLY      // Semanal
+  BIWEEKLY    // Quinzenal
+  MONTHLY     // Mensal
+  BIMONTHLY   // Bimestral
+  QUARTERLY   // Trimestral
+  SEMIANNUAL  // Semestral
+  ANNUAL      // Anual
+  EVENTUAL    // Eventual (sem lógica automática)
+}
+
+model Unit {
+  id     String @id @default(cuid())
+  name   String
+  code   String @unique
+  users  User[]
+  tasks  Task[]
+}
+
+model User {
+  id      String @id @default(cuid())
+  name    String
+  email   String @unique
+  role    Role   @default(OPERATOR)
+  unitId  String
+  unit    Unit   @relation(fields: [unitId], references: [id])
+  tasks   Task[] // Tarefas criadas por este user
+
+  // --- ADICIONE ESTA LINHA ---
+  history TaskHistory[] // Histórico de ações deste usuário
+  // ---------------------------
+}
+
+model Task {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime
+  status      TaskStatus  @default(PENDING)
+  
+  // Novos campos de Ciclo de Vida
+  frequency   Frequency   @default(NONE)
+  
+  createdAt   DateTime    @default(now())
+  completedAt DateTime?   // Data que o operador deu o "check"
+  validatedAt DateTime?   // Data que o gestor validou (fim do ciclo)
+
+  createdById String
+  createdBy   User        @relation(fields: [createdById], references: [id])
+  
+  unitId      String
+  unit        Unit        @relation(fields: [unitId], references: [id])
+
+  // Relacionamento com o Histórico
+  history     TaskHistory[]
+}
+
+// NOVA TABELA: Auditoria
+model TaskHistory {
+  id          String   @id @default(cuid())
+  action      String   // Ex: "CREATE", "UPDATE", "COMPLETE", "VALIDATE"
+  detail      String?  // Ex: "Mudou prazo de X para Y"
+  timestamp   DateTime @default(now())
+  
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+}

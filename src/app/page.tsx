@@ -1,65 +1,103 @@
-import Image from "next/image";
+import { PrismaClient } from "@prisma/client";
+import { startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
+import DashboardCalendar from "@/components/DashboardCalendar";
+import StatusCards from "@/components/StatusCards";
+import TaskForm from "@/components/TaskForm";
+import DateFilter from "@/components/DateFilter";
+import YearView from "@/components/YearView"; // Vamos criar jajá
+import UserSwitcher from "@/components/UserSwitcher";
+import { getCurrentUser } from "@/lib/auth"; // <--- Importe nossa nova função
 
-export default function Home() {
+const prisma = new PrismaClient();
+
+// No Next.js App Router, searchParams é injetado como prop na página
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined };
+}) {
+  const resolvedParams = await searchParams; // Next 15 exige await nos params
+
+  // --- CORREÇÃO ---
+  const now = new Date();
+  const view = resolvedParams.view === "year" ? "year" : "month";
+
+  // Verificação explícita de undefined/null
+  const month =
+    resolvedParams.month !== undefined
+      ? Number(resolvedParams.month)
+      : now.getMonth();
+
+  const year =
+    resolvedParams.year !== undefined
+      ? Number(resolvedParams.year)
+      : now.getFullYear();
+  // ----------------
+
+  // 1. Busque o usuário real
+  const currentUser = await getCurrentUser();
+
+  const referenceDate = new Date(year, month, 1);
+
+  // 2. Definir o range de busca (Otimização do Banco)
+  const rangeStart =
+    view === "month" ? startOfMonth(referenceDate) : startOfYear(referenceDate);
+  const rangeEnd =
+    view === "month" ? endOfMonth(referenceDate) : endOfYear(referenceDate);
+
+  // 3. Buscar APENAS tarefas desse período
+  const tasks = await prisma.task.findMany({
+    where: {
+      dueDate: {
+        gte: rangeStart,
+        lte: rangeEnd,
+      },
+    },
+    include: {
+      history: {
+        include: { user: true }, // Traz o nome do usuário do histórico
+        orderBy: { timestamp: "desc" }, // O mais recente primeiro
+      },
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  // Para os cards de estatística, talvez você queira ver o total geral ou apenas do mês?
+  // Por enquanto, vamos manter os cards reagindo ao filtro atual.
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-7xl mx-auto">
+        {" "}
+        {/* Aumentei um pouco a largura */}
+        <header className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Agenda da Unidade
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+        </header>
+        {/* Componente de Filtro Controla a URL */}
+        <DateFilter />
+        <StatusCards tasks={tasks} />
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          <div className="xl:col-span-2">
+            {/* Renderização Condicional da View */}
+            {view === "month" ? (
+              <DashboardCalendar
+                tasks={tasks}
+                currentDate={referenceDate} // Passamos a data selecionada
+                currentUser={currentUser}
+              />
+            ) : (
+              <YearView tasks={tasks} year={year} />
+            )}
+          </div>
+
+          <div>
+            <TaskForm />
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+      <UserSwitcher currentUser={currentUser} />
+    </main>
   );
 }
