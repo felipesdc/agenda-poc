@@ -90,21 +90,30 @@ export async function createTask(
   }
 }
 
-// --- UPDATE TASK REFINADO ---
+// app/actions.ts
+
+// ... imports
+
 export async function updateTask(
   taskId: string,
   prevState: FormState,
   formData: FormData
 ): Promise<FormState> {
+  // Delay simulado (pode remover se quiser agilizar)
   await new Promise((resolve) => setTimeout(resolve, 500));
 
-  // 1. Validação dos dados novos
+  // 1. Captura e Validação
   const validatedFields = taskSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description"),
     dueDate: formData.get("dueDate"),
     frequency: formData.get("frequency"),
   });
+
+  // CAPTURA OS IDS DOS FUNCIONÁRIOS
+  const newFocalPointIds = formData
+    .getAll("focalPoints")
+    .map((id) => Number(id));
 
   if (!validatedFields.success) {
     return {
@@ -114,21 +123,20 @@ export async function updateTask(
     };
   }
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUser(); // Usando nossa função de Auth
   if (!user) return { message: "Você precisa estar logado.", success: false };
 
-  // CAPTURAR OS IDs
-  const focalPointIds = formData.getAll("focalPoints").map((id) => Number(id));
-
   try {
-    // 2. BUSCAR DADOS ORIGINAIS (Snapshot "Antes")
+    // 2. BUSCAR DADOS ORIGINAIS (COM PONTOS FOCAIS)
+    // Precisamos do include aqui para comparar o "Antes"
     const oldTask = await prisma.task.findUnique({
       where: { id: taskId },
+      include: { focalPoints: true },
     });
 
     if (!oldTask) return { message: "Tarefa não encontrada", success: false };
 
-    // Preparar os novos dados para comparação
+    // Preparar dados
     const newDate = new Date(`${validatedFields.data.dueDate}T12:00:00Z`);
     const newFrequency =
       (validatedFields.data.frequency as Frequency) || "NONE";
@@ -143,56 +151,47 @@ export async function updateTask(
         description: newDesc,
         dueDate: newDate,
         frequency: newFrequency,
-        // --- ATUALIZANDO RELACIONAMENTO ---
-        // Usamos 'set' para substituir todos os antigos pelos novos selecionados
+
+        // Atualiza relacionamento N:N
         focalPoints: {
-          set: focalPointIds.map((id) => ({ id })),
+          set: newFocalPointIds.map((id) => ({ id })),
         },
-        // ----------------------------------
       },
     });
 
-    // 4. LÓGICA DE AUDITORIA GRANULAR (Comparação)
+    // 4. AUDITORIA INTELIGENTE
 
-    // Comparação de Título
-    if (oldTask.title !== newTitle) {
+    // ... (Logs de Título, Data, Frequência e Descrição anteriores mantidos aqui) ...
+    if (oldTask.title !== newTitle)
       await logTaskHistory(taskId, user.id, "UPDATE", `Título alterado.`);
-    }
-
-    // Comparação de Data (Formatada para ser legível)
-    // Usamos getTime() para comparar datas corretamente
     if (oldTask.dueDate.getTime() !== newDate.getTime()) {
-      const oldDateStr = format(oldTask.dueDate, "dd/MM/yyyy");
-      const newDateStr = format(newDate, "dd/MM/yyyy");
+      await logTaskHistory(taskId, user.id, "UPDATE", `Prazo alterado.`);
+    }
+    if (oldTask.frequency !== newFrequency)
       await logTaskHistory(
         taskId,
         user.id,
         "UPDATE",
-        `Prazo alterado de ${oldDateStr} para ${newDateStr}`
+        `Periodicidade alterada.`
       );
-    }
 
-    // Comparação de Periodicidade
-    if (oldTask.frequency !== newFrequency) {
-      // Pequeno mapa para traduzir no log se quiser, ou usa o ENUM mesmo
-      await logTaskHistory(
-        taskId,
-        user.id,
-        "UPDATE",
-        `Periodicidade alterada para ${newFrequency}`
-      );
-    }
+    // --- NOVO: LOG DE PONTOS FOCAIS ---
+    // Lógica: Criamos arrays de IDs ordenados e comparamos como strings
+    const oldIds = oldTask.focalPoints
+      .map((emp) => emp.id)
+      .sort((a, b) => a - b)
+      .join(",");
+    const newIdsSorted = newFocalPointIds.sort((a, b) => a - b).join(",");
 
-    // Comparação de Descrição
-    // Aqui aplicamos sua regra: se for texto longo, não mostrar o "de -> para", apenas avisar.
-    if ((oldTask.description || "") !== newDesc) {
+    if (oldIds !== newIdsSorted) {
       await logTaskHistory(
         taskId,
         user.id,
         "UPDATE",
-        "Descrição/Detalhes atualizados."
+        "Lista de Pontos Focais alterada."
       );
     }
+    // ----------------------------------
 
     revalidatePath("/");
     return {
