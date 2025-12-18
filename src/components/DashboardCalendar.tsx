@@ -12,19 +12,21 @@ import {
 } from "date-fns";
 import { useState } from "react";
 import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
-import { Task, User } from "@prisma/client";
+import { Employee, Task, User } from "@prisma/client";
 import TaskModal from "./TaskModal";
 
 interface CalendarProps {
   tasks: any[];
   currentDate: Date;
   currentUser: User | null; // <--- Nova prop
+  employees: Employee[];
 }
 
 export default function DashboardCalendar({
   tasks,
   currentDate,
   currentUser,
+  employees,
 }: CalendarProps) {
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
 
@@ -61,6 +63,7 @@ export default function DashboardCalendar({
           isOpen={!!selectedTask}
           onClose={() => setSelectedTask(null)}
           currentUser={currentUser}
+          employees={employees}
         />
       )}
       <div className="bg-white rounded-xl shadow-sm border p-6">

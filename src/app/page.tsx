@@ -39,6 +39,11 @@ export default async function Home({
 
   const referenceDate = new Date(year, month, 1);
 
+  // 1. BUSCAR TODOS OS FUNCIONÁRIOS (Para preencher o select)
+  const allEmployees = await prisma.employee.findMany({
+    orderBy: { name: "asc" },
+  });
+
   // 2. Definir o range de busca (Otimização do Banco)
   const rangeStart =
     view === "month" ? startOfMonth(referenceDate) : startOfYear(referenceDate);
@@ -58,6 +63,9 @@ export default async function Home({
         include: { user: true }, // Traz o nome do usuário do histórico
         orderBy: { timestamp: "desc" }, // O mais recente primeiro
       },
+      // --- ADICIONE ESTE INCLUDE ---
+      focalPoints: true, // Traz os funcionários vinculados
+      // ----------------------------
     },
     orderBy: { dueDate: "asc" },
   });
@@ -86,6 +94,7 @@ export default async function Home({
                 tasks={tasks}
                 currentDate={referenceDate} // Passamos a data selecionada
                 currentUser={currentUser}
+                employees={allEmployees} // <--- NOVA PROP
               />
             ) : (
               <YearView tasks={tasks} year={year} />

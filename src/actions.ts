@@ -60,6 +60,8 @@ export async function createTask(
   const user = await getCurrentUser();
   if (!user) return { message: "Você precisa estar logado.", success: false };
 
+  const focalPointIds = formData.getAll("focalPoints").map((id) => Number(id));
+
   try {
     const newTask = await prisma.task.create({
       data: {
@@ -70,6 +72,12 @@ export async function createTask(
         frequency: (validatedFields.data.frequency as Frequency) || "NONE",
         createdById: user.id,
         unitId: user.unitId,
+
+        // --- CONECTANDO PONTOS FOCAIS ---
+        focalPoints: {
+          connect: focalPointIds.map((id) => ({ id })),
+        },
+        // --------------------------------
       },
     });
 
@@ -109,6 +117,9 @@ export async function updateTask(
   const user = await getCurrentUser();
   if (!user) return { message: "Você precisa estar logado.", success: false };
 
+  // CAPTURAR OS IDs
+  const focalPointIds = formData.getAll("focalPoints").map((id) => Number(id));
+
   try {
     // 2. BUSCAR DADOS ORIGINAIS (Snapshot "Antes")
     const oldTask = await prisma.task.findUnique({
@@ -132,6 +143,12 @@ export async function updateTask(
         description: newDesc,
         dueDate: newDate,
         frequency: newFrequency,
+        // --- ATUALIZANDO RELACIONAMENTO ---
+        // Usamos 'set' para substituir todos os antigos pelos novos selecionados
+        focalPoints: {
+          set: focalPointIds.map((id) => ({ id })),
+        },
+        // ----------------------------------
       },
     });
 

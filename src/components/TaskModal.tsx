@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Task, TaskHistory, User, Frequency } from "@prisma/client"; // Importe os tipos
+import { Task, TaskHistory, User, Frequency, Employee } from "@prisma/client"; // Importe os tipos
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -24,6 +24,7 @@ import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
 // Tipo estendido para incluir o histórico que buscamos no page.tsx
 type TaskWithHistory = Task & {
   history: (TaskHistory & { user: User })[];
+  focalPoints: Employee[]; // <--- Novo campo
 };
 
 interface TaskModalProps {
@@ -31,6 +32,7 @@ interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: User | null; // <--- Nova prop
+  employees: Employee[]; // <--- Lista completa para o select
 }
 
 const initialState = { message: "", errors: {}, success: false };
@@ -53,6 +55,7 @@ export default function TaskModal({
   isOpen,
   onClose,
   currentUser,
+  employees,
 }: TaskModalProps) {
   const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [isEditing, setIsEditing] = useState(false);
@@ -173,6 +176,27 @@ export default function TaskModal({
                         {frequencyMap[task.frequency]}
                       </span>
                     </p>
+                    {/* --- EXIBIÇÃO DOS PONTOS FOCAIS --- */}
+                    <div className="mt-1">
+                      <span className="text-gray-500 mr-2">Pontos Focais:</span>
+                      {task.focalPoints.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {task.focalPoints.map((emp) => (
+                            <span
+                              key={emp.id}
+                              className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100"
+                            >
+                              {emp.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic">
+                          Nenhum definido
+                        </span>
+                      )}
+                    </div>
+                    {/* ---------------------------------- */}
                   </div>
                 </div>
 
@@ -244,6 +268,47 @@ export default function TaskModal({
                       ))}
                     </select>
                   </div>
+                </div>
+
+                {/* SELETOR DE PONTOS FOCAIS */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pontos Focais
+                  </label>
+                  <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto p-2 bg-gray-50">
+                    {employees.map((emp) => {
+                      // Verifica se já estava selecionado
+                      const isChecked = task.focalPoints.some(
+                        (fp) => fp.id === emp.id
+                      );
+
+                      return (
+                        <label
+                          key={emp.id}
+                          className="flex items-center gap-2 p-2 hover:bg-white rounded cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            name="focalPoints"
+                            value={emp.id}
+                            defaultChecked={isChecked}
+                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-700">
+                              {emp.name}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              {emp.email}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selecione quem acompanhará esta tarefa.
+                  </p>
                 </div>
 
                 <div>

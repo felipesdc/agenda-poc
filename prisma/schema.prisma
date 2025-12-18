@@ -85,6 +85,10 @@ model Task {
 
   // Relacionamento com o Histórico
   history     TaskHistory[]
+
+  // --- NOVO CAMPO: PONTOS FOCAIS ---
+  // Relacionamento Muitos-para-Muitos implícito do Prisma
+  focalPoints Employee[]
 }
 
 // NOVA TABELA: Auditoria
@@ -99,4 +103,14 @@ model TaskHistory {
   
   userId      String
   user        User     @relation(fields: [userId], references: [id])
+}
+
+// --- NOVA ENTIDADE: FUNCIONÁRIO ---
+model Employee {
+  id    Int     @id // Matrícula (Número Inteiro, digitado manualmente)
+  name  String
+  email String  @unique
+
+  // O "back-relation" para sabermos de quais tarefas ele é ponto focal
+  tasks Task[]  
 }
