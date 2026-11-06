@@ -1,9 +1,10 @@
 "use client";
 
 import { User } from "lucide-react";
+import type { User as AgendaUser } from "@prisma/client";
 import { switchUser } from "@/actions";
 
-export default function UserSwitcher({ currentUser }: { currentUser: any }) {
+export default function UserSwitcher({ currentUser }: { currentUser: AgendaUser | null }) {
   return (
     <div className="fixed bottom-4 right-4 bg-white border border-gray-200 shadow-xl rounded-lg p-3 z-50 flex flex-col gap-2 text-xs">
       <div className="flex items-center gap-2 border-b pb-2 mb-1">
@@ -32,6 +33,12 @@ export default function UserSwitcher({ currentUser }: { currentUser: any }) {
         className="bg-purple-50 text-purple-700 hover:bg-purple-100 px-3 py-2 rounded text-left transition-colors font-medium"
       >
         Alice (Admin)
+      </button>
+      <button
+        onClick={() => switchUser("leitor@banco.com")}
+        className="bg-gray-50 text-gray-700 hover:bg-gray-100 px-3 py-2 rounded text-left transition-colors font-medium"
+      >
+        Carlos (Visualizador)
       </button>
     </div>
   );

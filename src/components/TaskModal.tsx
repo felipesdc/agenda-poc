@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Task, TaskHistory, User, Frequency, Employee } from "@prisma/client"; // Importe os tipos
+import { useState, useRef } from "react";
+import { Task, TaskHistory, User, Employee } from "@prisma/client"; // Importe os tipos
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   X,
-  Trash2,
+  Archive,
+  ArchiveRestore,
   Edit2,
   Save,
   XCircle,
@@ -18,13 +19,18 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useActionState } from "react";
-import { updateTask, deleteTask, completeTask, validateTask } from "@/actions";
+import { updateTask, archiveTask, restoreTask, completeTask, validateTask } from "@/actions";
+import { canArchiveTask, canRestoreTask, canEditTask, canValidateTask } from "@/lib/permissions";
+import TaskFields from "./TaskFields";
+import { frequencyLabels as frequencyMap } from "@/lib/task-frequency";
+import type { FormState } from "@/actions";
 import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
 
 // Tipo estendido para incluir o histórico que buscamos no page.tsx
-type TaskWithHistory = Task & {
+export type TaskWithHistory = Task & {
   history: (TaskHistory & { user: User })[];
   focalPoints: Employee[]; // <--- Novo campo
+  archivedBy?: { name: string } | null;
 };
 
 interface TaskModalProps {
@@ -35,20 +41,7 @@ interface TaskModalProps {
   employees: Employee[]; // <--- Lista completa para o select
 }
 
-const initialState = { message: "", errors: {}, success: false };
-
-// Dicionário para traduzir o Enum do banco para Português
-const frequencyMap: Record<string, string> = {
-  NONE: "Sem repetição",
-  WEEKLY: "Semanal",
-  BIWEEKLY: "Quinzenal",
-  MONTHLY: "Mensal",
-  BIMONTHLY: "Bimestral",
-  QUARTERLY: "Trimestral",
-  SEMIANNUAL: "Semestral",
-  ANNUAL: "Anual",
-  EVENTUAL: "Eventual",
-};
+const initialState: FormState = { message: "", errors: {}, success: false };
 
 export default function TaskModal({
   task,
@@ -59,47 +52,55 @@ export default function TaskModal({
 }: TaskModalProps) {
   const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [isEditing, setIsEditing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isCompleting, setIsCompleting] = useState(false); // Novo state
-  const [isValidating, setIsValidating] = useState(false); // Novo state
+  const [pendingAction, setPendingAction] = useState<"archive" | "restore" | "complete" | "validate" | null>(null);
+  const [showArchiveForm, setShowArchiveForm] = useState(false);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [actionError, setActionError] = useState("");
+  const actionInFlight = useRef(false);
 
-  const updateTaskWithId = updateTask.bind(null, task.id);
-  const [state, formAction, isPending] = useActionState(
-    updateTaskWithId,
-    initialState
-  );
-
-  useEffect(() => {
-    if (state.success) {
-      setIsEditing(false);
-      onClose();
+  const [state, formAction, isPending] = useActionState(async (previous: FormState, data: FormData): Promise<FormState> => {
+    try {
+      const result = await updateTask(task.id, previous, data);
+      if (result.success) onClose();
+      return result;
+    } catch {
+      return { success: false, message: "Não foi possível salvar. Tente novamente." };
     }
-  }, [state.success, onClose]);
+  }, initialState);
+  const isBusy = isPending || pendingAction !== null;
+  const isArchiving = pendingAction === "archive";
+  const isRestoring = pendingAction === "restore";
+  const isCompleting = pendingAction === "complete";
+  const isValidating = pendingAction === "validate";
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    await deleteTask(task.id);
-    setIsDeleting(false);
-    onClose();
+  const runAction = async (action: "archive" | "restore" | "complete" | "validate") => {
+    if (actionInFlight.current || isPending) return;
+    actionInFlight.current = true;
+    setPendingAction(action);
+    setActionError("");
+    try {
+      const actions = {
+        archive: () => archiveTask(task.id, archiveReason),
+        restore: () => restoreTask(task.id),
+        complete: () => completeTask(task.id),
+        validate: () => validateTask(task.id),
+      };
+      const result = await actions[action]();
+      if (result.success) onClose();
+      else setActionError(result.message);
+    } catch {
+      setActionError("Não foi possível realizar a operação. Tente novamente.");
+    } finally {
+      actionInFlight.current = false;
+      setPendingAction(null);
+    }
   };
-
-  const handleComplete = async () => {
-    setIsCompleting(true);
-    await completeTask(task.id);
-    setIsCompleting(false);
-    onClose();
-  };
-
-  const handleValidate = async () => {
-    setIsValidating(true);
-    await validateTask(task.id);
-    setIsValidating(false);
-    onClose();
-  };
+  const handleRestore = () => runAction("restore");
+  const handleComplete = () => runAction("complete");
+  const handleValidate = () => runAction("validate");
 
   if (!isOpen) return null;
 
-  const dateForInput = format(new Date(task.dueDate), "yyyy-MM-dd");
   const statusColorKey = getTaskStatusColor(
     new Date(task.dueDate),
     task.status
@@ -120,6 +121,8 @@ export default function TaskModal({
             </div>
             <button
               onClick={onClose}
+              disabled={isBusy}
+              aria-label="Fechar tarefa"
               className="p-1 hover:bg-black/10 rounded-full transition-colors"
             >
               <X className="w-5 h-5 text-gray-700" />
@@ -153,7 +156,8 @@ export default function TaskModal({
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto">
+        <div className="p-6 overflow-y-auto" aria-busy={isBusy}>
+          {actionError && <p role="alert" className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">{actionError}</p>}
           {activeTab === "details" ? (
             /* --- CONTEÚDO DA ABA DETALHES --- */
             !isEditing ? (
@@ -206,135 +210,35 @@ export default function TaskModal({
                   )}
                 </div>
 
-                <div className="flex gap-3 pt-4 border-t mt-4">
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded-lg font-medium transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" /> Editar
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                    className="flex items-center justify-center gap-2 bg-red-50 text-red-700 hover:bg-red-100 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-                  >
-                    {isDeleting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // MODO EDIÇÃO
-              <form action={formAction} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Título
+                {task.archivedAt && <section className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900" aria-label="Arquivamento">
+                  <p className="font-semibold">Tarefa arquivada</p>
+                  <p>Em {format(new Date(task.archivedAt), "dd/MM/yyyy 'às' HH:mm")}</p>
+                  <p>Por: {task.archivedBy?.name || task.history.find((log) => log.action === "ARCHIVE" && log.userId === task.archivedById)?.user.name || "Usuário registrado no histórico"}</p>
+                  <p className="whitespace-pre-wrap">Motivo: {task.archiveReason}</p>
+                </section>}
+                {showArchiveForm && canArchiveTask(currentUser, task) && <form
+                  onSubmit={(event) => { event.preventDefault(); void runAction("archive"); }}
+                  aria-label="Arquivar tarefa"
+                  className="p-3 border border-amber-200 rounded-lg space-y-3"
+                >
+                  <label className="block text-sm font-medium text-gray-700">
+                    Motivo do arquivamento
+                    <textarea name="archiveReason" required minLength={3} maxLength={500} value={archiveReason} onChange={(event) => setArchiveReason(event.target.value)} disabled={isBusy} className="mt-1 w-full border rounded p-2 text-gray-900" />
                   </label>
-                  <input
-                    name="title"
-                    defaultValue={task.title}
-                    className="w-full p-2 border border-gray-300 rounded-md text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Prazo
-                    </label>
-                    <input
-                      type="date"
-                      name="dueDate"
-                      defaultValue={dateForInput}
-                      className="w-full p-2 border border-gray-300 rounded-md text-sm text-gray-900 [color-scheme:light] focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
+                  <p className="text-xs text-gray-600">A tarefa sairá da agenda ativa. Seus dados e histórico serão preservados.</p>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={isBusy} className="px-3 py-2 rounded bg-amber-600 text-white disabled:opacity-50">{isArchiving ? "Arquivando..." : "Confirmar arquivamento"}</button>
+                    <button type="button" disabled={isBusy} onClick={() => { setShowArchiveForm(false); setActionError(""); }} className="px-3 py-2 rounded bg-gray-100 text-gray-800">Cancelar arquivamento</button>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Periodicidade
-                    </label>
-                    <select
-                      name="frequency"
-                      defaultValue={task.frequency}
-                      className="w-full p-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                    >
-                      {Object.keys(frequencyMap).map((key) => (
-                        <option key={key} value={key}>
-                          {frequencyMap[key]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* SELETOR DE PONTOS FOCAIS */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Pontos Focais
-                  </label>
-                  <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto p-2 bg-gray-50">
-                    {employees.map((emp) => {
-                      // Verifica se já estava selecionado
-                      const isChecked = task.focalPoints.some(
-                        (fp) => fp.id === emp.id
-                      );
-
-                      return (
-                        <label
-                          key={emp.id}
-                          className="flex items-center gap-2 p-2 hover:bg-white rounded cursor-pointer transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            name="focalPoints"
-                            value={emp.id}
-                            defaultChecked={isChecked}
-                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                          />
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium text-gray-700">
-                              {emp.name}
-                            </span>
-                            <span className="text-[10px] text-gray-400">
-                              {emp.email}
-                            </span>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Selecione quem acompanhará esta tarefa.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descrição
-                  </label>
-                  <textarea
-                    name="description"
-                    rows={3}
-                    defaultValue={task.description || ""}
-                    className="w-full p-2 border border-gray-300 rounded-md text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                  />
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap min-h-[80px]">
-                  {task.description || (
-                    <span className="italic text-gray-400">Sem descrição.</span>
-                  )}
-                </div>
+                </form>}
 
                 {/* --- NOVA ÁREA DE AÇÃO DO CICLO DE VIDA --- */}
                 <div className="py-2">
-                  {task.status === "PENDING" && (
+                  {canEditTask(currentUser, task) && (
                     <button
                       onClick={handleComplete}
-                      disabled={isCompleting}
+                      type="button"
+                      disabled={isBusy}
                       className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
                     >
                       {isCompleting ? (
@@ -346,7 +250,7 @@ export default function TaskModal({
                     </button>
                   )}
 
-                  {task.status === "COMPLETED" && (
+                  {!task.archivedAt && task.status === "COMPLETED" && (
                     <div className="space-y-2">
                       <div className="p-3 bg-blue-50 text-blue-800 text-sm rounded border border-blue-100 flex items-center gap-2">
                         <CheckCircle className="w-4 h-4" />
@@ -354,10 +258,11 @@ export default function TaskModal({
                       </div>
 
                       {/* APENAS ADMIN VÊ ESSE BOTÃO */}
-                      {currentUser?.role === "ADMIN" && (
+                      {canValidateTask(currentUser, task) && (
                         <button
                           onClick={handleValidate}
-                          disabled={isValidating}
+                          type="button"
+                          disabled={isBusy}
                           className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
                         >
                           {isValidating ? (
@@ -382,9 +287,41 @@ export default function TaskModal({
                 </div>
                 {/* ------------------------------------------ */}
 
+                <div className="flex gap-3 pt-4 border-t mt-4">
+                  {canEditTask(currentUser, task) && <button
+                    disabled={isBusy}
+                    onClick={() => setIsEditing(true)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" /> Editar
+                  </button>}
+                  {canArchiveTask(currentUser, task) && <button
+                    type="button"
+                    onClick={() => setShowArchiveForm(true)}
+                    disabled={isBusy}
+                    className="flex items-center justify-center gap-2 bg-amber-50 text-amber-800 hover:bg-amber-100 px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                  >
+                    <Archive className="w-4 h-4" /> Arquivar tarefa
+                  </button>}
+                  {canRestoreTask(currentUser, task) && <button
+                    type="button"
+                    onClick={handleRestore}
+                    disabled={isBusy}
+                    className="flex items-center justify-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                  >
+                    {isRestoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArchiveRestore className="w-4 h-4" />} Restaurar tarefa
+                  </button>}
+                </div>
+              </div>
+            ) : (
+              // MODO EDIÇÃO
+              <form action={formAction} aria-busy={isPending} className="space-y-4">
+                <TaskFields task={task} employees={employees} errors={state.errors} disabled={isBusy} />
+                {!state.success && state.message && <p role="alert" className="p-3 bg-red-50 text-red-700 text-sm rounded">{state.message}</p>}
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
+                    disabled={isBusy}
                     onClick={() => setIsEditing(false)}
                     className="flex-1 flex items-center justify-center gap-2 bg-gray-100 text-gray-700 hover:bg-gray-200 py-2 rounded-lg font-medium transition-colors"
                   >
@@ -392,7 +329,7 @@ export default function TaskModal({
                   </button>
                   <button
                     type="submit"
-                    disabled={isPending}
+                    disabled={isBusy}
                     className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
                   >
                     {isPending ? (
@@ -438,6 +375,8 @@ export default function TaskModal({
                         {log.action === "UPDATE" && "Tarefa Atualizada"}
                         {log.action === "COMPLETE" && "Tarefa Concluída"}
                         {log.action === "VALIDATE" && "Tarefa Validada"}
+                        {log.action === "ARCHIVE" && "Tarefa Arquivada"}
+                        {log.action === "RESTORE" && "Tarefa Restaurada"}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">
                         Por: {log.user.name}

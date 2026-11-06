@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/task-input.test.ts tests/archive-input.test.ts tests/frequency.test.ts tests/task-status.test.ts",
+    "test:integration": "vitest run tests/task-actions.test.ts",
+    "test:ui": "vitest run tests/task-ui.test.tsx tests/calendar-ui.test.tsx"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
@@ -22,16 +27,20 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
+    "jsdom": "^26.1.0",
     "prisma": "^6.19.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

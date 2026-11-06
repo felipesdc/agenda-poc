@@ -9,7 +9,6 @@ import {
   endOfWeek,
   isSameMonth,
   isSameDay,
-  setMonth,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getTaskStatusColor, cn } from "@/lib/utils";

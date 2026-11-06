@@ -14,7 +14,7 @@ async function main() {
   // --- NOVOS: CRIANDO FUNCIONÁRIOS (Tabela Employee) ---
 
   // Funcionário 1: Alice (Que também será usuária Admin)
-  const empAlice = await prisma.employee.upsert({
+  await prisma.employee.upsert({
     where: { id: 1001 }, // Matrícula fictícia
     update: {},
     create: {
@@ -25,7 +25,7 @@ async function main() {
   });
 
   // Funcionário 2: Bob (Que também será usuário Operador)
-  const empBob = await prisma.employee.upsert({
+  await prisma.employee.upsert({
     where: { id: 1002 },
     update: {},
     create: {
@@ -36,7 +36,7 @@ async function main() {
   });
 
   // Funcionário 3: Carlos (Apenas Ponto Focal, sem acesso ao sistema)
-  const empCarlos = await prisma.employee.upsert({
+  await prisma.employee.upsert({
     where: { id: 1003 },
     update: {},
     create: {
@@ -69,6 +69,12 @@ async function main() {
       role: "OPERATOR",
       unitId: unit.id,
     },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "leitor@banco.com" },
+    update: { role: "VIEWER" },
+    create: { name: "Carlos Leitor", email: "leitor@banco.com", role: "VIEWER", unitId: unit.id },
   });
 
   console.log("Usuários de sistema sincronizados!");

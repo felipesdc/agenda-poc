@@ -1,28 +1,27 @@
-import { PrismaClient } from "@prisma/client";
 import { startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import DashboardCalendar from "@/components/DashboardCalendar";
 import StatusCards from "@/components/StatusCards";
+import ArchiveFilter from "@/components/ArchiveFilter";
+import ArchivedTaskList from "@/components/ArchivedTaskList";
 import TaskForm from "@/components/TaskForm";
 import DateFilter from "@/components/DateFilter";
-import YearView from "@/components/YearView"; // Vamos criar jajá
+import YearView from "@/components/YearView";
 import UserSwitcher from "@/components/UserSwitcher";
-import { getCurrentUser } from "@/lib/auth"; // <--- Importe nossa nova função
+import { isDemoModeEnabled } from "@/lib/auth";
+import { getAgendaData } from "@/lib/tasks";
+import { canWriteTasks } from "@/lib/permissions";
 
-const prisma = new PrismaClient();
-
-// No Next.js App Router, searchParams é injetado como prop na página
 export default async function Home({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const resolvedParams = await searchParams; // Next 15 exige await nos params
+  const resolvedParams = await searchParams;
 
-  // --- CORREÇÃO ---
   const now = new Date();
+  const archived = resolvedParams.archived === "true";
   const view = resolvedParams.view === "year" ? "year" : "month";
 
-  // Verificação explícita de undefined/null
   const month =
     resolvedParams.month !== undefined
       ? Number(resolvedParams.month)
@@ -32,81 +31,54 @@ export default async function Home({
     resolvedParams.year !== undefined
       ? Number(resolvedParams.year)
       : now.getFullYear();
-  // ----------------
-
-  // 1. Busque o usuário real
-  const currentUser = await getCurrentUser();
 
   const referenceDate = new Date(year, month, 1);
 
-  // 1. BUSCAR TODOS OS FUNCIONÁRIOS (Para preencher o select)
-  const allEmployees = await prisma.employee.findMany({
-    orderBy: { name: "asc" },
-  });
-
-  // 2. Definir o range de busca (Otimização do Banco)
   const rangeStart =
     view === "month" ? startOfMonth(referenceDate) : startOfYear(referenceDate);
   const rangeEnd =
     view === "month" ? endOfMonth(referenceDate) : endOfYear(referenceDate);
 
-  // 3. Buscar APENAS tarefas desse período
-  const tasks = await prisma.task.findMany({
-    where: {
-      dueDate: {
-        gte: rangeStart,
-        lte: rangeEnd,
-      },
-    },
-    include: {
-      history: {
-        include: { user: true }, // Traz o nome do usuário do histórico
-        orderBy: { timestamp: "desc" }, // O mais recente primeiro
-      },
-      // --- ADICIONE ESTE INCLUDE ---
-      focalPoints: true, // Traz os funcionários vinculados
-      // ----------------------------
-    },
-    orderBy: { dueDate: "asc" },
-  });
-
-  // Para os cards de estatística, talvez você queira ver o total geral ou apenas do mês?
-  // Por enquanto, vamos manter os cards reagindo ao filtro atual.
+  const { currentUser, tasks, employees: allEmployees } = await getAgendaData(rangeStart, rangeEnd, archived);
+  if (!currentUser) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-8">
+        <h1 className="text-2xl font-bold text-gray-900">Agenda da Unidade</h1>
+        <p className="mt-4 text-gray-700">Identifique-se para consultar a agenda.</p>
+        {isDemoModeEnabled() && <UserSwitcher currentUser={null} />}
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
-        {" "}
-        {/* Aumentei um pouco a largura */}
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
             Agenda da Unidade
           </h1>
         </header>
-        {/* Componente de Filtro Controla a URL */}
-        <DateFilter />
-        <StatusCards tasks={tasks} />
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          <div className="xl:col-span-2">
-            {/* Renderização Condicional da View */}
-            {view === "month" ? (
-              <DashboardCalendar
-                tasks={tasks}
-                currentDate={referenceDate} // Passamos a data selecionada
-                currentUser={currentUser}
-                employees={allEmployees} // <--- NOVA PROP
-              />
-            ) : (
-              <YearView tasks={tasks} year={year} />
-            )}
-          </div>
-
-          <div>
-            <TaskForm />
-          </div>
-        </div>
+        <ArchiveFilter />
+        {archived ? (
+          <ArchivedTaskList tasks={tasks} currentUser={currentUser} />
+        ) : (
+          <>
+            <DateFilter />
+            <StatusCards tasks={tasks} />
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+              <div className="xl:col-span-2">
+                {view === "month" ? (
+                  <DashboardCalendar tasks={tasks} currentDate={referenceDate} currentUser={currentUser} employees={allEmployees} />
+                ) : (
+                  <YearView tasks={tasks} year={year} />
+                )}
+              </div>
+              {canWriteTasks(currentUser) && <div><TaskForm employees={allEmployees} /></div>}
+            </div>
+          </>
+        )}
       </div>
-      <UserSwitcher currentUser={currentUser} />
+      {isDemoModeEnabled() && <UserSwitcher currentUser={currentUser} />}
     </main>
   );
 }

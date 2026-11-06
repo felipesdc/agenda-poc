@@ -57,6 +57,7 @@ model User {
   unitId  String
   unit    Unit   @relation(fields: [unitId], references: [id])
   tasks   Task[] // Tarefas criadas por este user
+  archivedTasks Task[] @relation("TaskArchivedBy")
 
   // --- ADICIONE ESTA LINHA ---
   history TaskHistory[] // Histórico de ações deste usuário
@@ -83,12 +84,25 @@ model Task {
   unitId      String
   unit        Unit        @relation(fields: [unitId], references: [id])
 
+  archivedAt    DateTime?
+  archivedById  String?
+  archiveReason String?
+  archivedBy    User? @relation("TaskArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+
+  // Uma ocorrência tem no máximo uma sucessora, inclusive sob concorrência.
+  sourceTaskId String? @unique
+  sourceTask   Task?   @relation("TaskRecurrence", fields: [sourceTaskId], references: [id], onDelete: SetNull)
+  nextTask     Task?   @relation("TaskRecurrence")
+
   // Relacionamento com o Histórico
   history     TaskHistory[]
 
   // --- NOVO CAMPO: PONTOS FOCAIS ---
   // Relacionamento Muitos-para-Muitos implícito do Prisma
   focalPoints Employee[]
+
+  @@index([unitId, dueDate])
+  @@index([unitId, archivedAt])
 }
 
 // NOVA TABELA: Auditoria
@@ -103,6 +117,8 @@ model TaskHistory {
   
   userId      String
   user        User     @relation(fields: [userId], references: [id])
+
+  @@index([taskId, timestamp])
 }
 
 // --- NOVA ENTIDADE: FUNCIONÁRIO ---

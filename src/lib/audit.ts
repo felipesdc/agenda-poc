@@ -1,25 +1,12 @@
-// lib/audit.ts
-import { PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
-const prisma = new PrismaClient();
-
+// A falha precisa chegar à transação para impedir alterações sem auditoria.
 export async function logTaskHistory(
+  transaction: Prisma.TransactionClient,
   taskId: string,
   userId: string,
   action: string,
   detail?: string
 ) {
-  try {
-    // Note o H maiúsculo em taskHistory se o model for TaskHistory
-    await prisma.taskHistory.create({
-      data: {
-        taskId,
-        userId,
-        action,
-        detail,
-      },
-    });
-  } catch (error) {
-    console.error("Falha ao gravar auditoria:", error);
-  }
+  await transaction.taskHistory.create({ data: { taskId, userId, action, detail } });
 }

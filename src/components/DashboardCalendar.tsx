@@ -12,11 +12,11 @@ import {
 } from "date-fns";
 import { useState } from "react";
 import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
-import { Employee, Task, User } from "@prisma/client";
-import TaskModal from "./TaskModal";
+import { Employee, User } from "@prisma/client";
+import TaskModal, { type TaskWithHistory } from "./TaskModal";
 
 interface CalendarProps {
-  tasks: any[];
+  tasks: TaskWithHistory[];
   currentDate: Date;
   currentUser: User | null; // <--- Nova prop
   employees: Employee[];
@@ -28,7 +28,7 @@ export default function DashboardCalendar({
   currentUser,
   employees,
 }: CalendarProps) {
-  const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskWithHistory | null>(null);
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -37,22 +37,6 @@ export default function DashboardCalendar({
 
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
   const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-  const getDayColor = (date: Date) => {
-    const tasksForDay = tasks.filter((t) => isSameDay(t.dueDate, date));
-    if (tasksForDay.length === 0) return "";
-
-    const statuses = tasksForDay.map((t) =>
-      getTaskStatusColor(t.dueDate, t.status)
-    );
-
-    if (statuses.includes("red")) return colorMap.red.calendar;
-    if (statuses.includes("yellow")) return colorMap.yellow.calendar;
-    if (statuses.includes("green")) return colorMap.green.calendar;
-    if (statuses.includes("blue")) return colorMap.blue.calendar;
-
-    return colorMap.gray.calendar;
-  };
 
   return (
     <>

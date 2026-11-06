@@ -48,7 +48,7 @@ export default function StatusCards({ tasks }: { tasks: Task[] }) {
 
 // Subcomponente
 // Adicionei um valor padrão "tasks = []" para evitar crash caso venha undefined
-function StatusCard({ title, count, tasks = [], colorClass, iconColor }: any) {
+function StatusCard({ title, count, tasks = [], colorClass, iconColor }: { title: string; count: number; tasks: Task[]; colorClass: string; iconColor: string }) {
   return (
     <div
       className={cn(
@@ -68,7 +68,7 @@ function StatusCard({ title, count, tasks = [], colorClass, iconColor }: any) {
       {tasks.length > 0 && (
         <div className="absolute left-0 top-full mt-2 w-full opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
           <div className="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden max-h-64 overflow-y-auto">
-            {tasks.map((task: any) => (
+            {tasks.map((task) => (
               <div
                 key={task.id}
                 className="p-3 border-b text-sm hover:bg-gray-50 text-gray-700"

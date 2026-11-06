@@ -1,351 +1,163 @@
-// app/actions.ts
 "use server";
 
-import { z } from "zod";
-import { prisma } from "@/lib/prisma"; // <--- USE O SINGLETON AQUI
+import type { Prisma, User } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 import { logTaskHistory } from "@/lib/audit";
-import { Frequency } from "@prisma/client";
-import { calculateNextDueDate } from "@/lib/frequency"; // <--- Importe a função que criamos
-import { format } from "date-fns"; // Importante para formatar as datas no log
-import { cookies } from "next/headers"; // <--- Importe
-import { getCurrentUser } from "@/lib/auth"; // Use nossa nova função
+import { calculateNextDueDate } from "@/lib/frequency";
+import { getCurrentUser, isDemoModeEnabled } from "@/lib/auth";
+import { canManageTasks, canWriteTasks } from "@/lib/permissions";
+import { archiveReasonSchema } from "@/lib/archive-input";
+import { parseTaskFormData, type TaskFieldErrors } from "@/lib/task-input";
 
-// O FormState permanece igual...
-export type FormState = {
-  errors?: {
-    title?: string[];
-    dueDate?: string[];
-    description?: string[];
-  };
-  message: string;
-  success?: boolean;
-};
+export type FormState = { errors?: TaskFieldErrors; message: string; success?: boolean };
 
-// Schema permanece igual...
-const taskSchema = z.object({
-  title: z.string().min(3, "O título deve ter pelo menos 3 caracteres"),
-  description: z.string().optional(),
-  dueDate: z
-    .string()
-    .refine((date) => new Date(date).toString() !== "Invalid Date", {
-      message: "Data inválida",
-    }),
-  frequency: z.nativeEnum(Frequency).optional(),
-});
+class TaskActionError extends Error {
+  constructor(message: string, readonly errors?: TaskFieldErrors) { super(message); }
+}
 
-// --- CREATE ---
-export async function createTask(
-  prevState: FormState,
-  formData: FormData
+async function mutate(
+  permission: "write" | "admin",
+  operation: (tx: Prisma.TransactionClient, user: User) => Promise<string>
 ): Promise<FormState> {
-  // Delay mantido para UX
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new TaskActionError("Você precisa estar logado.");
+    if (!(permission === "admin" ? canManageTasks(user) : canWriteTasks(user))) {
+      throw new TaskActionError("Acesso negado para este perfil.");
+    }
+    const message = await prisma.$transaction((tx) => operation(tx, user));
+    revalidatePath("/");
+    return { success: true, message, errors: {} };
+  } catch (error) {
+    if (error instanceof TaskActionError) return { success: false, message: error.message, errors: error.errors };
+    console.error("Falha na operação de tarefa:", error);
+    return { success: false, message: "Não foi possível salvar a alteração. Tente novamente." };
+  }
+}
 
-  const validatedFields = taskSchema.safeParse({
-    title: formData.get("title"),
-    description: formData.get("description"),
-    dueDate: formData.get("dueDate"),
-    frequency: formData.get("frequency"),
+async function checkFocalPoints(tx: Prisma.TransactionClient, ids: number[]) {
+  const count = await tx.employee.count({ where: { id: { in: ids } } });
+  if (count !== ids.length) {
+    throw new TaskActionError("Revise os pontos focais selecionados.", {
+      focalPoints: ["Um ou mais funcionários não foram encontrados."],
+    });
+  }
+}
+
+export async function createTask(previous: FormState, formData: FormData): Promise<FormState> {
+  const fields = parseTaskFormData(formData);
+  if (!fields.success) return { success: false, message: "Erro na validação dos campos.", errors: fields.error.flatten().fieldErrors };
+  return mutate("write", async (tx, user) => {
+    const { title, description, dueDate, frequency, focalPoints } = fields.data;
+    await checkFocalPoints(tx, focalPoints);
+    const task = await tx.task.create({ data: {
+      title, description: description || "", dueDate: new Date(`${dueDate}T12:00:00Z`), frequency,
+      createdById: user.id, unitId: user.unitId,
+      focalPoints: { connect: focalPoints.map((id) => ({ id })) },
+    } });
+    await logTaskHistory(tx, task.id, user.id, "CREATE", "Tarefa criada");
+    return "Tarefa criada com sucesso!";
   });
-
-  if (!validatedFields.success) {
-    return {
-      errors: validatedFields.error.flatten().fieldErrors,
-      message: "Erro na validação dos campos.",
-      success: false,
-    };
-  }
-
-  const user = await getCurrentUser();
-  if (!user) return { message: "Você precisa estar logado.", success: false };
-
-  const focalPointIds = formData.getAll("focalPoints").map((id) => Number(id));
-
-  try {
-    const newTask = await prisma.task.create({
-      data: {
-        title: validatedFields.data.title,
-        description: validatedFields.data.description || "",
-        dueDate: new Date(`${validatedFields.data.dueDate}T12:00:00Z`),
-        status: "PENDING",
-        frequency: (validatedFields.data.frequency as Frequency) || "NONE",
-        createdById: user.id,
-        unitId: user.unitId,
-
-        // --- CONECTANDO PONTOS FOCAIS ---
-        focalPoints: {
-          connect: focalPointIds.map((id) => ({ id })),
-        },
-        // --------------------------------
-      },
-    });
-
-    await logTaskHistory(newTask.id, user.id, "CREATE", "Tarefa criada");
-
-    revalidatePath("/");
-    return { success: true, message: "Tarefa criada com sucesso!", errors: {} };
-  } catch (e) {
-    return { message: "Erro de banco de dados.", success: false };
-  }
 }
 
-// app/actions.ts
-
-// ... imports
-
-export async function updateTask(
-  taskId: string,
-  prevState: FormState,
-  formData: FormData
-): Promise<FormState> {
-  // Delay simulado (pode remover se quiser agilizar)
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
-  // 1. Captura e Validação
-  const validatedFields = taskSchema.safeParse({
-    title: formData.get("title"),
-    description: formData.get("description"),
-    dueDate: formData.get("dueDate"),
-    frequency: formData.get("frequency"),
+export async function updateTask(taskId: string, previous: FormState, formData: FormData): Promise<FormState> {
+  const fields = parseTaskFormData(formData);
+  if (!fields.success) return { success: false, message: "Erro na validação dos campos.", errors: fields.error.flatten().fieldErrors };
+  return mutate("write", async (tx, user) => {
+    const { title, description, dueDate, frequency, focalPoints } = fields.data;
+    const date = new Date(`${dueDate}T12:00:00Z`);
+    const old = await tx.task.findFirst({ where: { id: taskId, unitId: user.unitId }, include: { focalPoints: true } });
+    if (!old) throw new TaskActionError("Tarefa não encontrada");
+    if (old.archivedAt !== null || old.status !== "PENDING") throw new TaskActionError("Apenas tarefas pendentes e ativas podem ser editadas.");
+    await checkFocalPoints(tx, focalPoints);
+    const changed = await tx.task.updateMany({
+      where: { id: taskId, unitId: user.unitId, archivedAt: null, status: "PENDING" },
+      data: { title, description: description || "", dueDate: date, frequency },
+    });
+    if (changed.count !== 1) throw new TaskActionError("A tarefa foi alterada. Atualize a página.");
+    await tx.task.update({ where: { id: taskId }, data: { focalPoints: { set: focalPoints.map((id) => ({ id })) } } });
+    const changes: [string, unknown, unknown][] = [
+      ["Título", old.title, title], ["Prazo", old.dueDate.toISOString(), date.toISOString()],
+      ["Periodicidade", old.frequency, frequency], ["Descrição", old.description || "", description || ""],
+      ["Pontos focais", old.focalPoints.map((item) => item.id).sort((a, b) => a - b), [...focalPoints].sort((a, b) => a - b)],
+    ];
+    for (const [field, before, after] of changes) {
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        await logTaskHistory(tx, taskId, user.id, "UPDATE", `${field}: ${JSON.stringify(before)} → ${JSON.stringify(after)}`);
+      }
+    }
+    return "Tarefa atualizada com sucesso!";
   });
-
-  // CAPTURA OS IDS DOS FUNCIONÁRIOS
-  const newFocalPointIds = formData
-    .getAll("focalPoints")
-    .map((id) => Number(id));
-
-  if (!validatedFields.success) {
-    return {
-      errors: validatedFields.error.flatten().fieldErrors,
-      message: "Erro na validação dos campos.",
-      success: false,
-    };
-  }
-
-  const user = await getCurrentUser(); // Usando nossa função de Auth
-  if (!user) return { message: "Você precisa estar logado.", success: false };
-
-  try {
-    // 2. BUSCAR DADOS ORIGINAIS (COM PONTOS FOCAIS)
-    // Precisamos do include aqui para comparar o "Antes"
-    const oldTask = await prisma.task.findUnique({
-      where: { id: taskId },
-      include: { focalPoints: true },
-    });
-
-    if (!oldTask) return { message: "Tarefa não encontrada", success: false };
-
-    // Preparar dados
-    const newDate = new Date(`${validatedFields.data.dueDate}T12:00:00Z`);
-    const newFrequency =
-      (validatedFields.data.frequency as Frequency) || "NONE";
-    const newTitle = validatedFields.data.title;
-    const newDesc = validatedFields.data.description || "";
-
-    // 3. ATUALIZAR NO BANCO
-    await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        title: newTitle,
-        description: newDesc,
-        dueDate: newDate,
-        frequency: newFrequency,
-
-        // Atualiza relacionamento N:N
-        focalPoints: {
-          set: newFocalPointIds.map((id) => ({ id })),
-        },
-      },
-    });
-
-    // 4. AUDITORIA INTELIGENTE
-
-    // ... (Logs de Título, Data, Frequência e Descrição anteriores mantidos aqui) ...
-    if (oldTask.title !== newTitle)
-      await logTaskHistory(taskId, user.id, "UPDATE", `Título alterado.`);
-    if (oldTask.dueDate.getTime() !== newDate.getTime()) {
-      await logTaskHistory(taskId, user.id, "UPDATE", `Prazo alterado.`);
-    }
-    if (oldTask.frequency !== newFrequency)
-      await logTaskHistory(
-        taskId,
-        user.id,
-        "UPDATE",
-        `Periodicidade alterada.`
-      );
-
-    // --- NOVO: LOG DE PONTOS FOCAIS ---
-    // Lógica: Criamos arrays de IDs ordenados e comparamos como strings
-    const oldIds = oldTask.focalPoints
-      .map((emp) => emp.id)
-      .sort((a, b) => a - b)
-      .join(",");
-    const newIdsSorted = newFocalPointIds.sort((a, b) => a - b).join(",");
-
-    if (oldIds !== newIdsSorted) {
-      await logTaskHistory(
-        taskId,
-        user.id,
-        "UPDATE",
-        "Lista de Pontos Focais alterada."
-      );
-    }
-    // ----------------------------------
-
-    revalidatePath("/");
-    return {
-      success: true,
-      message: "Tarefa atualizada com sucesso!",
-      errors: {},
-    };
-  } catch (e) {
-    console.error(e);
-    return { message: "Erro ao atualizar tarefa.", success: false };
-  }
 }
 
-// --- DELETE ---
-export async function deleteTask(taskId: string) {
-  // Buscamos o usuário para tentar logar a ação (mesmo que o log suma com o cascade, é boa prática)
-  const user = await getCurrentUser();
-  if (!user) return { message: "Você precisa estar logado.", success: false };
-
-  try {
-    // Opcional: Logar antes de deletar (se usássemos Soft Delete, seria essencial)
-    /* if (user) {
-       await logTaskHistory(taskId, user.id, "DELETE", "Tarefa excluída");
-    }
-    */
-
-    await prisma.task.delete({
-      where: { id: taskId },
+export async function archiveTask(taskId: string, reason: string): Promise<FormState> {
+  const validated = archiveReasonSchema.safeParse(reason);
+  if (!validated.success) return { success: false, message: validated.error.issues[0].message };
+  return mutate("admin", async (tx, user) => {
+    const changed = await tx.task.updateMany({
+      where: { id: taskId, unitId: user.unitId, archivedAt: null },
+      data: { archivedAt: new Date(), archivedById: user.id, archiveReason: validated.data },
     });
-
-    revalidatePath("/");
-    return { success: true, message: "Tarefa excluída." };
-  } catch (e) {
-    return { success: false, message: "Erro ao excluir." };
-  }
+    if (changed.count !== 1) throw new TaskActionError("Tarefa indisponível para arquivamento ou já arquivada.");
+    await logTaskHistory(tx, taskId, user.id, "ARCHIVE", `Motivo: ${validated.data}`);
+    return "Tarefa arquivada. O histórico foi preservado.";
+  });
 }
 
-// 5. Action de CONCLUSÃO (Operador)
-export async function completeTask(taskId: string) {
-  const user = await getCurrentUser();
-  if (!user) return { message: "Você precisa estar logado.", success: false };
-
-  try {
-    await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(), // Data/Hora atual
-      },
+export async function restoreTask(taskId: string): Promise<FormState> {
+  return mutate("admin", async (tx, user) => {
+    const changed = await tx.task.updateMany({
+      where: { id: taskId, unitId: user.unitId, archivedAt: { not: null } },
+      data: { archivedAt: null, archivedById: null, archiveReason: null },
     });
-
-    await logTaskHistory(
-      taskId,
-      user.id,
-      "COMPLETE",
-      "Tarefa marcada como concluída"
-    );
-    revalidatePath("/");
-    return { success: true, message: "Tarefa concluída!" };
-  } catch (e) {
-    return { success: false, message: "Erro ao concluir." };
-  }
+    if (changed.count !== 1) throw new TaskActionError("Tarefa indisponível para restauração.");
+    await logTaskHistory(tx, taskId, user.id, "RESTORE", "Tarefa restaurada; estado e prazo originais preservados");
+    return "Tarefa restaurada para a agenda.";
+  });
 }
 
-// 6. Action de VALIDAÇÃO (Gestor) + GERAÇÃO DA PRÓXIMA
-export async function validateTask(taskId: string) {
-  const user = await getCurrentUser();
-  if (!user) return { message: "Você precisa estar logado.", success: false };
-
-  // VERIFICAÇÃO DE PERFIL
-  if (user.role !== "ADMIN") {
-    return {
-      success: false,
-      message: "Acesso Negado: Apenas gestores podem validar tarefas.",
-    };
-  }
-  try {
-    // 1. Buscamos a tarefa atual para saber a periodicidade e data base
-    const currentTask = await prisma.task.findUnique({
-      where: { id: taskId },
+export async function completeTask(taskId: string): Promise<FormState> {
+  return mutate("write", async (tx, user) => {
+    const updated = await tx.task.updateMany({
+      where: { id: taskId, unitId: user.unitId, archivedAt: null, status: "PENDING" },
+      data: { status: "COMPLETED", completedAt: new Date() },
     });
-
-    if (!currentTask)
-      return { success: false, message: "Tarefa não encontrada." };
-
-    // 2. Atualizamos a atual para VALIDATED
-    await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        status: "VALIDATED",
-        validatedAt: new Date(),
-      },
-    });
-
-    await logTaskHistory(
-      taskId,
-      user.id,
-      "VALIDATE",
-      "Conclusão validada pelo gestor"
-    );
-
-    // 3. Lógica de Recorrência (A Mágica)
-    const nextDate = calculateNextDueDate(
-      currentTask.dueDate,
-      currentTask.frequency
-    );
-
-    if (nextDate) {
-      const nextTask = await prisma.task.create({
-        data: {
-          title: currentTask.title,
-          description: currentTask.description,
-          dueDate: nextDate, // Nova data calculada
-          status: "PENDING",
-          frequency: currentTask.frequency, // Mantém a periodicidade
-          createdById: user.id, // O sistema ou o gestor criou
-          unitId: currentTask.unitId,
-        },
-      });
-
-      // Logamos na NOVA tarefa que ela nasceu de uma recorrência
-      await logTaskHistory(
-        nextTask.id,
-        user.id,
-        "CREATE",
-        `Gerada automaticamente (Recorrência de ${currentTask.title})`
-      );
-
-      revalidatePath("/");
-      return { success: true, message: "Validado! Próxima tarefa gerada." };
-    }
-
-    revalidatePath("/");
-    return { success: true, message: "Tarefa validada e finalizada." };
-  } catch (e) {
-    console.error(e);
-    return { success: false, message: "Erro ao validar." };
-  }
+    if (updated.count !== 1) throw new TaskActionError("Tarefa indisponível para conclusão.");
+    await logTaskHistory(tx, taskId, user.id, "COMPLETE", "Tarefa marcada como concluída");
+    return "Tarefa concluída!";
+  });
 }
 
-// ACTION DE LOGIN (Simulado)
+export async function validateTask(taskId: string): Promise<FormState> {
+  return mutate("admin", async (tx, user) => {
+    // A primeira instrução é uma escrita condicional: duas requisições não reivindicam a mesma conclusão.
+    const claimed = await tx.task.updateMany({
+      where: { id: taskId, unitId: user.unitId, archivedAt: null, status: "COMPLETED" },
+      data: { status: "VALIDATED", validatedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw new TaskActionError("Tarefa indisponível para validação ou já validada.");
+    const current = await tx.task.findUniqueOrThrow({ where: { id: taskId }, include: { focalPoints: true } });
+    await logTaskHistory(tx, taskId, user.id, "VALIDATE", "Conclusão validada pelo gestor");
+    const nextDate = calculateNextDueDate(current.dueDate, current.frequency);
+    if (!nextDate) return "Tarefa validada e finalizada.";
+    const next = await tx.task.create({ data: {
+      title: current.title, description: current.description, dueDate: nextDate, frequency: current.frequency,
+      createdById: user.id, unitId: current.unitId, sourceTaskId: current.id,
+      focalPoints: { connect: current.focalPoints.map(({ id }) => ({ id })) },
+    } });
+    await logTaskHistory(tx, next.id, user.id, "CREATE", `Gerada automaticamente (Recorrência de ${current.title})`);
+    return "Validado! Próxima tarefa gerada.";
+  });
+}
+
 export async function switchUser(email: string) {
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
-
+  if (!isDemoModeEnabled()) return;
+  const user = await prisma.user.findUnique({ where: { email } });
   if (user) {
-    const cookieStore = await cookies();
-    // Define um cookie que expira em 1 dia
-    cookieStore.set("userId", user.id, {
-      secure: true,
-      httpOnly: true,
-      maxAge: 86400,
-    });
+    const store = await cookies();
+    store.set("userId", user.id, { secure: true, httpOnly: true, sameSite: "lax", path: "/", maxAge: 86400 });
     revalidatePath("/");
   }
 }
