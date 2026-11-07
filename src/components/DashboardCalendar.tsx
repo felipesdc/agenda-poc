@@ -11,7 +11,7 @@ import {
   isSameDay,
 } from "date-fns";
 import { useState } from "react";
-import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
+import { getDayStatusColor, colorMap, cn } from "@/lib/utils";
 import { Employee, User } from "@prisma/client";
 import TaskModal, { type TaskWithHistory } from "./TaskModal";
 
@@ -74,22 +74,8 @@ export default function DashboardCalendar({
             );
             // -----------------------------
 
-            // Recalcula a cor baseado nessas tarefas filtradas
-            let colorClass = "";
-            if (dayTasks.length > 0) {
-              // Replicamos a lógica do getDayColor aqui para usar o dayTasks já filtrado
-              const statuses = dayTasks.map((t) =>
-                getTaskStatusColor(new Date(t.dueDate), t.status)
-              );
-              if (statuses.includes("red")) colorClass = colorMap.red.calendar;
-              else if (statuses.includes("yellow"))
-                colorClass = colorMap.yellow.calendar;
-              else if (statuses.includes("green"))
-                colorClass = colorMap.green.calendar;
-              else if (statuses.includes("blue"))
-                colorClass = colorMap.blue.calendar;
-              else colorClass = colorMap.gray.calendar;
-            }
+            const dayColor = getDayStatusColor(dayTasks);
+            const colorClass = dayColor ? colorMap[dayColor].calendar : "";
 
             return (
               <div

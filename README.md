@@ -11,17 +11,18 @@ Prova de conceito de uma agenda de tarefas por unidade, com prazos, pontos focai
 - Periodicidades semanal, quinzenal (14 dias), mensal, bimestral, trimestral, semestral e anual. A próxima ocorrência nasce ao validar a atual; `NONE` e `EVENTUAL` não geram ocorrências.
 - Associação de funcionários como pontos focais no cadastro e na edição.
 - Permissões por perfil/unidade, transações com auditoria e recorrência sem duplicação.
-- Troca de usuário de demonstração entre gestor, operador e visualizador.
+- Login por e-mail e senha, sessões verificadas no servidor, logout e provisionamento administrativo.
+- Troca de usuário de demonstração entre gestor, operador e visualizador, sem autenticação real configurada.
 
-**Estado:** protótipo local. A troca de perfil é uma simulação de sessão, habilitada apenas com `DEMO_MODE=true` fora de produção. Permissões por perfil/unidade e integridade do ciclo são aplicadas no servidor; autenticação real continua pendente. Consulte o [diagnóstico e plano de evolução](docs/ROADMAP.md) antes de usar dados reais.
+**Estado:** prova de conceito com login real por senha e permissões por perfil/unidade. O cadastro público é fechado. O modo demonstração continua disponível apenas fora de produção e sem segredo de autenticação configurado. Veja a [configuração de autenticação](docs/AUTENTICACAO.md) antes de iniciar um piloto.
 
 ## Tecnologias
 
-Next.js 16.0.7 (App Router), React 19.2, TypeScript, Tailwind CSS 4, Prisma 6, SQLite, Zod e date-fns. As versões exatas estão no `package-lock.json`.
+Next.js 16.0.7 (App Router), React 19.2, TypeScript, Tailwind CSS 4, Prisma 6, SQLite, Better Auth, Zod e date-fns. As versões exatas estão no `package-lock.json`.
 
 ## Executar localmente
 
-Pré-requisitos: Node.js compatível com Next.js 16 (20.9 ou superior) e npm.
+Pré-requisitos: Node.js 20.19 ou superior e npm. Recomendado Node 22, indicado em `.nvmrc`.
 
 ```bash
 npm ci
@@ -29,10 +30,18 @@ cp .env.example .env
 npx prisma generate
 npx prisma migrate deploy
 npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
+```
+
+Para login por senha, configure `BETTER_AUTH_URL` e um `BETTER_AUTH_SECRET` gerado no `.env`, depois provisione um acesso:
+
+```bash
+npm run auth:provision -- --email admin@banco.com
 npm run dev
 ```
 
-Abra http://localhost:3000 e selecione um perfil no canto inferior direito:
+Abra http://localhost:3000/login. O comando pede uma senha de 12 a 128 caracteres, sem exibi-la. O passo a passo, incluindo redefinição e revogação de sessões, está em [AUTENTICACAO.md](docs/AUTENTICACAO.md).
+
+Para a demonstração local sem senha, mantenha `BETTER_AUTH_SECRET` vazio e use `DEMO_MODE=true`. Os perfis disponíveis são:
 
 | Perfil de demonstração | E-mail |
 | --- | --- |
@@ -46,7 +55,7 @@ O seed cria a unidade `U001`, três usuários e três funcionários fictícios. 
 
 ## Atualizar uma instalação existente
 
-Os incrementos 2 e 3 incluem migrações aditivas para recorrência, arquivamento e índices. Antes de iniciar a versão atualizada, com a sua configuração `DATABASE_URL` carregada:
+Os incrementos incluem migrações aditivas para recorrência, arquivamento, autenticação e índices. Antes de iniciar a versão atualizada, com a sua configuração `DATABASE_URL` carregada:
 
 ```bash
 npx prisma generate
@@ -54,7 +63,7 @@ npx prisma migrate deploy
 npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
 ```
 
-Inclua `DEMO_MODE="true"` no `.env` para usar a demonstração com `npm run dev`. Essa flag nunca habilita a sessão em produção. A migração foi verificada em uma cópia do banco; o banco original do projeto não foi alterado automaticamente. Vínculos de origem só são registrados para novas ocorrências geradas.
+Configure o login conforme [AUTENTICACAO.md](docs/AUTENTICACAO.md). Para demonstração local sem segredo configurado, use `DEMO_MODE=true`; essa flag nunca habilita a sessão simulada em produção. A migração foi verificada em uma cópia do banco; o banco original do projeto não foi alterado automaticamente. Vínculos de origem só são registrados para novas ocorrências geradas.
 
 ## Arquivar e restaurar
 
@@ -69,6 +78,7 @@ Operadores e visualizadores consultam o arquivo da própria unidade; arquivar e 
 | Comando | Finalidade |
 | --- | --- |
 | `npm run dev` | Servidor de desenvolvimento |
+| `npm run auth:provision -- --email usuario@dominio.com` | Provisionar ou redefinir senha de usuário existente |
 | `npm run lint` | Análise estática com ESLint |
 | `npm test` | Toda a suíte: regras, integração com SQLite e componentes |
 | `npm run test:unit` | Validação, recorrência e classificação por prazo |
@@ -85,6 +95,7 @@ A suíte cobre validação, recorrências, classificação por prazo, CRUD e cic
 
 ## Documentação
 
+- [Login, provisionamento e sessões](docs/AUTENTICACAO.md)
 - [Arquitetura, entidades e regras atuais](docs/ARQUITETURA.md)
 - [Melhorias priorizadas e critérios de aceite](docs/ROADMAP.md)
 - [Testes: execução, cobertura e limites](docs/TESTES.md)

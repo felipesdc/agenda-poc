@@ -81,3 +81,15 @@ Veja [TESTES.md](TESTES.md) para comandos, cobertura e limites. Nenhuma regra de
 - Testes com SQLite real confirmaram restauração de cada estado, isolamento entre unidades, motivo obrigatório, proteção contra chamadas simultâneas, preservação dos vínculos de recorrência e rollback de ARCHIVE/RESTORE via falha de auditoria.
 - Testes JSDOM cobrem formulário de motivo, cancelamento, erros/nova tentativa, restrições do modal, consulta do arquivo e navegação Ativas/Arquivadas. Navegador real e transporte HTTP continuam fora desta verificação.
 - A aplicação removeu a Server Action de exclusão física. Banco original não alterado; instruções de atualização no README.
+
+## Incremento 4 — login por senha e calendário — 07/11/2026
+
+- Runtime de verificação: Node 22.23.4. O requisito mínimo passou a Node 20.19; `.nvmrc` indica Node 22.
+- `npm test`: 187 aprovados em 11 arquivos, incluindo Better Auth real, SQLite temporário, Server Actions com sessão por senha, componentes de login/logout, parâmetros inválidos e cores do calendário.
+- `npx tsc --noEmit`, `npm run lint` e `git diff --check`: aprovados.
+- `npx next build --webpack`: aprovado; `/login` e `/api/auth/[...all]` constam como rotas dinâmicas, sem depender de segredos durante o build.
+- Migração `20261107000000_password_auth` aplicada com Prisma em cópia do banco existente. `prisma migrate diff`: nenhuma diferença para o schema atualizado. Comparação dos dados anteriores de unidades, usuários, funcionários, tarefas, vínculos e histórico confirmou preservação após migração e testes HTTP.
+- `npm run auth:provision` executado por stdin na cópia, usando senha exclusiva de teste. Confirmados gravação do acesso sem modificar o perfil/unidade e ausência de senhas padrão no seed.
+- Servidor Next em localhost: agenda anônima pede identificação; `/login` entrega formulário; POST de login retorna 200 e cookie de sessão; GET da agenda autenticada retorna 200 sem seletor de demonstração; GET de `/login` autenticado retorna 307 para a agenda; POST de logout retorna 200 e a agenda volta a exigir identificação.
+- Host de automação de navegador indisponível. A revisão visual em navegador real continua pendente; as interações do formulário foram verificadas em JSDOM e o transporte em HTTP real.
+- Banco original e arquivos locais de segredos não alterados. Configuração e operação detalhadas em [AUTENTICACAO.md](AUTENTICACAO.md).

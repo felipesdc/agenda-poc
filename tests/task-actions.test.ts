@@ -42,10 +42,12 @@ let actions: typeof import("../src/actions");
 let getCurrentUser: typeof import("../src/lib/auth").getCurrentUser;
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const originalDemoMode = process.env.DEMO_MODE;
+const originalAuthSecret = process.env.BETTER_AUTH_SECRET;
 const previous = { message: "" };
 
 beforeAll(async () => {
   process.env.DEMO_MODE = "true";
+  delete process.env.BETTER_AUTH_SECRET;
   directory = await mkdtemp(join(tmpdir(), "agenda-poc-tests-"));
   process.env.DATABASE_URL = `file:${join(directory, "test.db")}`;
   // Importar só após escolher a base temporária evita qualquer acesso ao dev.db.
@@ -89,6 +91,8 @@ afterAll(async () => {
   else process.env.DATABASE_URL = originalDatabaseUrl;
   if (originalDemoMode === undefined) delete process.env.DEMO_MODE;
   else process.env.DEMO_MODE = originalDemoMode;
+  if (originalAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+  else process.env.BETTER_AUTH_SECRET = originalAuthSecret;
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 

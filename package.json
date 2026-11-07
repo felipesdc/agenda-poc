@@ -9,12 +9,15 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:unit": "vitest run tests/task-input.test.ts tests/archive-input.test.ts tests/frequency.test.ts tests/task-status.test.ts",
-    "test:integration": "vitest run tests/task-actions.test.ts",
-    "test:ui": "vitest run tests/task-ui.test.tsx tests/calendar-ui.test.tsx"
+    "test:unit": "vitest run tests/task-input.test.ts tests/archive-input.test.ts tests/calendar-params.test.ts tests/auth-settings.test.ts tests/frequency.test.ts tests/task-status.test.ts",
+    "test:integration": "vitest run tests/task-actions.test.ts tests/password-auth.test.ts",
+    "test:ui": "vitest run tests/task-ui.test.tsx tests/calendar-ui.test.tsx tests/auth-ui.test.tsx",
+    "auth:provision": "node --import tsx scripts/provision-user.ts"
   },
   "dependencies": {
+    "@better-auth/prisma-adapter": "^1.7.18",
     "@prisma/client": "^6.19.0",
+    "better-auth": "^1.7.18",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.555.0",
@@ -33,16 +36,21 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "dotenv": "^18.0.9",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
     "jsdom": "^26.1.0",
     "prisma": "^6.19.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.7"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

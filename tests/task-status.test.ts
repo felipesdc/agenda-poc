@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getTaskStatusColor } from "../src/lib/utils";
+import { getTaskStatusColor, getDayStatusColor } from "../src/lib/utils";
 
 describe("classificação por prazo e estado", () => {
   beforeEach(() => {
@@ -35,4 +35,21 @@ describe("classificação por prazo e estado", () => {
     vi.setSystemTime(new Date(2026, 11, 31, 23));
     expect(getTaskStatusColor(new Date(2027, 0, 1, 0), "PENDING")).toBe("yellow");
   });
+  it("dia sem tarefas não recebe cor", () => {
+    expect(getDayStatusColor([])).toBeNull();
+  });
+
+  it("prioriza pendências sobre concluídas e validadas no mesmo dia", () => {
+    for (const [day, color] of [[4, "red"], [5, "yellow"], [30, "green"]] as const) {
+      const tasks = [
+        { dueDate: new Date(2026, 10, day), status: "PENDING" },
+        { dueDate: new Date(2026, 10, day), status: "COMPLETED" },
+        { dueDate: new Date(2026, 10, day), status: "VALIDATED" },
+      ];
+      expect(getDayStatusColor(tasks)).toBe(color);
+      expect(getDayStatusColor(tasks.slice(1))).toBe("blue");
+      expect(getDayStatusColor(tasks.slice(2))).toBe("gray");
+    }
+  });
+
 });

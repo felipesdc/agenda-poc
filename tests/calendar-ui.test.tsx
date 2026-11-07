@@ -20,6 +20,12 @@ vi.mock("@/actions", () => ({
   switchUser: navigation.switchUser, updateTask: vi.fn(), archiveTask: vi.fn(), restoreTask: vi.fn(), completeTask: vi.fn(), validateTask: vi.fn(),
 }));
 
+function expectPushedQuery(expectedUrl: string) {
+  const actual = navigation.push.mock.calls.at(-1)?.[0];
+  expect(actual).toBeTypeOf("string");
+  expect(Object.fromEntries(new URL(actual, "http://localhost").searchParams)).toEqual(Object.fromEntries(new URL(expectedUrl, "http://localhost").searchParams));
+}
+
 beforeEach(() => { navigation.query = "month=0&year=2026"; });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -45,18 +51,18 @@ describe("navegação do calendário", () => {
   ])("gera URL correta ao navegar a partir de %s", async (query, buttonIndex, url) => {
     navigation.query = query;
     render(<DateFilter />);
-    // As duas setas ainda não possuem rótulo acessível; não depender de classes ou SVG.
-    await userEvent.setup().click(screen.getAllByRole("button")[buttonIndex]);
-    expect(navigation.push).toHaveBeenCalledWith(url);
+    const name = query.includes("view=year") ? (buttonIndex === 2 ? "Ano anterior" : "Próximo ano") : (buttonIndex === 2 ? "Mês anterior" : "Próximo mês");
+    await userEvent.setup().click(screen.getByRole("button", { name }));
+    expectPushedQuery(url);
   });
 
   it("alterna entre mês e ano preservando o período", async () => {
     render(<DateFilter />);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Ano" }));
-    expect(navigation.push).toHaveBeenCalledWith("/?view=year&month=0&year=2026");
+    expectPushedQuery("/?view=year&month=0&year=2026");
     await user.click(screen.getByRole("button", { name: "Mês" }));
-    expect(navigation.push).toHaveBeenCalledWith("/?view=month&month=0&year=2026");
+    expectPushedQuery("/?view=month&month=0&year=2026");
   });
 });
 
@@ -130,7 +136,7 @@ describe("consulta das tarefas arquivadas", () => {
     render(<ArchiveFilter />);
     expect(screen.getByRole("button", { name: "Arquivadas" }).getAttribute("aria-pressed")).toBe("true");
     await userEvent.setup().click(screen.getByRole("button", { name: "Ativas" }));
-    expect(navigation.push).toHaveBeenCalledWith("/?view=year&month=0&year=2026");
+    expectPushedQuery("/?view=year&month=0&year=2026");
   });
 
   it("mostra estado vazio do arquivo", () => {
@@ -147,5 +153,38 @@ describe("consulta das tarefas arquivadas", () => {
     await user.click(screen.getByRole("button", { name: "Histórico" }));
     expect(screen.getByText("Tarefa Criada")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restaurar tarefa" })).toBeNull();
+  });
+});
+
+
+describe("robustez dos filtros e cores anuais", () => {
+  it("mês/ano inválidos usam o período atual", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 7, 12));
+    navigation.query = "month=NaN&year=999999";
+    render(<DateFilter />);
+    expect(screen.getByRole("heading", { name: "novembro 2026" })).toBeTruthy();
+  });
+  it.each([
+    ["month=0&year=1900", "Mês anterior"], ["view=year&year=1900", "Ano anterior"],
+    ["month=11&year=2100", "Próximo mês"], ["view=year&year=2100", "Próximo ano"],
+  ])("impede navegação além do intervalo (%s)", async (query, name) => {
+    navigation.query = query;
+    render(<DateFilter />);
+    expect(screen.getByRole("button", { name })).toHaveProperty("disabled", true);
+    await userEvent.setup().click(screen.getByRole("button", { name }));
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+  it("navegar preserva filtros adicionais", async () => {
+    navigation.query = "month=0&year=2026&filter=mine";
+    render(<DateFilter />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Próximo mês" }));
+    expectPushedQuery("/?view=month&month=1&year=2026&filter=mine");
+  });
+  it("visão anual representa concluídas em azul e validadas em cinza com texto acessível", () => {
+    const tasks = [taskFixture({ status: "COMPLETED", dueDate: new Date(2026, 10, 5, 12) }), taskFixture({ id: "validated", status: "VALIDATED", dueDate: new Date(2026, 10, 6, 12) })];
+    render(<YearView tasks={tasks} year={2026} />);
+    expect(screen.getByRole("img", { name: "05/11/2026: Concluída" }).className).toContain("bg-blue-500");
+    expect(screen.getByRole("img", { name: "06/11/2026: Validada" }).className).toContain("bg-gray-400");
   });
 });

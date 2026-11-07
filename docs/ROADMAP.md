@@ -11,7 +11,7 @@ Diagnóstico por leitura do código em 05/11/2026. Os itens abaixo registram pro
 - Remoção dos atrasos artificiais, dos erros/avisos do lint e correção do contrato assíncrono de `searchParams` e idioma da página.
 - Testes automatizados de validação e verificação das ações com SQLite temporário. Evidências em [VALIDACAO.md](VALIDACAO.md).
 
-Ainda pendentes na etapa 1: normalização dos filtros de mês/ano e coerência das cores na visão anual. O incremento 2 abaixo entrega autorização, atomicidade e proteção das recorrências.
+As pendências originais de filtros de mês/ano e cores anuais foram concluídas no incremento 4. O incremento 2 abaixo entrega autorização, atomicidade e proteção das recorrências.
 
 ## Incremento 2 entregue — autorização e integridade
 
@@ -23,7 +23,7 @@ Ainda pendentes na etapa 1: normalização dos filtros de mês/ano e coerência 
 - Sessão de demonstração exige `DEMO_MODE=true`, é bloqueada em produção e inclui perfil visualizador no seed.
 - Migração aditiva testada em cópia do banco existente. Banco original não alterado automaticamente.
 
-O incremento 3 abaixo entrega arquivamento; autenticação real continua pendente antes do piloto. O cadastro de funcionários permanece global; uma política de lotação precisa ser definida antes de introduzir isolamento desse cadastro.
+Os incrementos 3 e 4 abaixo entregam arquivamento e autenticação por senha. O cadastro de funcionários permanece global; uma política de lotação precisa ser definida antes de introduzir isolamento desse cadastro.
 
 ## Incremento 3 entregue — arquivamento e restauração
 
@@ -34,7 +34,18 @@ O incremento 3 abaixo entrega arquivamento; autenticação real continua pendent
 - Restauração exclusiva do gestor mantém prazo, estado e recorrência; ações usam transações, guardas contra repetição e auditoria atômica.
 - Migração aditiva, testes de permissões, restauração, consultas, concorrência e rollback.
 
-O próximo requisito antes do piloto é autenticação real. Normalização de mês/ano, coerência das cores anuais e CI continuam pendentes.
+O incremento 4 abaixo entrega login por senha, normalização de mês/ano e cores anuais. CI, gestão de usuários e revisão operacional continuam pendentes.
+
+## Incremento 4 entregue — autenticação por senha e calendário
+
+- Better Auth com SQLite/Prisma, sem cadastro público, vinculado ao diretório de perfis/unidades existente.
+- Login, logout, sessões verificadas no servidor, expiração e revogação após redefinição de senha.
+- Provisionamento administrativo por terminal; seed sem senhas padrão e migração aditiva sem modificar os dados do domínio.
+- Rate limit em banco, proteção de origem/CSRF e configuração de produção com HTTPS; modo de demonstração desativado quando um segredo real é configurado.
+- Filtros de mês/ano normalizados no servidor e na interface, intervalo 1900–2100, botões com nomes acessíveis e navegação dentro dos limites.
+- Mesma prioridade de cores na visão mensal/anual; concluídas em azul e validadas em cinza, com rótulos acessíveis nas marcações anuais.
+
+Próximos incrementos: CI, gestão administrativa de usuários, revisão de dependências e preparação operacional do piloto. Recuperação de senha por e-mail, MFA e definição dos proxies confiáveis ainda não foram implementados. A redefinição atual é administrativa.
 
 ## Etapa 1 — Escopo original e pendências
 
@@ -91,4 +102,4 @@ Acesso a tarefas de outras unidades é bloqueado. O gestor pode validar a própr
 
 ## Primeiro incremento recomendado
 
-Com autorização, transações e recorrência protegidas, priorizar autenticação real antes do piloto. Normalização de mês/ano e cores anuais continuam pendentes. Autenticação real e operação são requisitos para um piloto com usuários reais; lembretes e integrações vêm após estabilizar esse fluxo.
+Com login, autorização e integridade implementados, priorizar CI e gestão de usuários, seguidas da revisão de dependências e preparação operacional antes do piloto. Lembretes e integrações vêm após estabilizar esse fluxo.

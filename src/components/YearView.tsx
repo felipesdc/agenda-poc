@@ -11,7 +11,7 @@ import {
   isSameDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { getTaskStatusColor, cn } from "@/lib/utils";
+import { getDayStatusColor, colorMap, taskStatusLabels, cn } from "@/lib/utils";
 import { Task } from "@prisma/client";
 
 interface YearViewProps {
@@ -54,7 +54,7 @@ function MiniCalendar({
   const end = endOfWeek(endOfMonth(date));
   const days = eachDayOfInterval({ start, end });
 
-  const monthTasks = tasks.filter((t) => t.dueDate.getMonth() === monthIndex);
+  const monthTasks = tasks.filter((t) => new Date(t.dueDate).getMonth() === monthIndex && new Date(t.dueDate).getFullYear() === year);
 
   return (
     <div className="border rounded-lg p-3">
@@ -75,15 +75,8 @@ function MiniCalendar({
           const isCurrentMonth = isSameMonth(day, date);
           const dayTasks = monthTasks.filter((t) => isSameDay(t.dueDate, day));
 
-          let dotColor = "";
-          if (dayTasks.length > 0) {
-            const statuses = dayTasks.map((t) =>
-              getTaskStatusColor(t.dueDate, t.status)
-            );
-            if (statuses.includes("red")) dotColor = "bg-red-500";
-            else if (statuses.includes("yellow")) dotColor = "bg-yellow-400";
-            else dotColor = "bg-green-500";
-          }
+          const dayColor = getDayStatusColor(dayTasks);
+          const dotColor = dayColor ? colorMap[dayColor].dot : "";
 
           return (
             <div
@@ -100,8 +93,10 @@ function MiniCalendar({
               >
                 {format(day, "d")}
               </span>
-              {dotColor && (
+              {dayColor && (
                 <div
+                  role="img"
+                  aria-label={`${format(day, "dd/MM/yyyy")}: ${taskStatusLabels[dayColor]}`}
                   className={cn(
                     "absolute bottom-0.5 w-1 h-1 rounded-full",
                     dotColor

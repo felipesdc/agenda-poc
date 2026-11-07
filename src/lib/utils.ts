@@ -63,3 +63,13 @@ export const colorMap = {
     dot: "bg-gray-400",
   },
 };
+
+
+export const taskStatusLabels: Record<TaskStatusColor, string> = {
+  red: "Vencida", yellow: "Vence em até 15 dias", green: "No prazo", blue: "Concluída", gray: "Validada",
+};
+
+export function getDayStatusColor(tasks: { dueDate: Date; status: string }[]): TaskStatusColor | null {
+  const colors = new Set(tasks.map((task) => getTaskStatusColor(new Date(task.dueDate), task.status)));
+  return (["red", "yellow", "green", "blue", "gray"] as const).find((color) => colors.has(color)) ?? null;
+}

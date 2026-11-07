@@ -1,3 +1,6 @@
+import Link from "next/link";
+import LogoutButton from "@/components/LogoutButton";
+import { isPasswordAuthConfigured } from "@/lib/password-auth";
 import { startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import DashboardCalendar from "@/components/DashboardCalendar";
 import StatusCards from "@/components/StatusCards";
@@ -9,6 +12,7 @@ import YearView from "@/components/YearView";
 import UserSwitcher from "@/components/UserSwitcher";
 import { isDemoModeEnabled } from "@/lib/auth";
 import { getAgendaData } from "@/lib/tasks";
+import { resolveCalendarParams } from "@/lib/calendar-params";
 import { canWriteTasks } from "@/lib/permissions";
 
 export default async function Home({
@@ -18,19 +22,7 @@ export default async function Home({
 }) {
   const resolvedParams = await searchParams;
 
-  const now = new Date();
-  const archived = resolvedParams.archived === "true";
-  const view = resolvedParams.view === "year" ? "year" : "month";
-
-  const month =
-    resolvedParams.month !== undefined
-      ? Number(resolvedParams.month)
-      : now.getMonth();
-
-  const year =
-    resolvedParams.year !== undefined
-      ? Number(resolvedParams.year)
-      : now.getFullYear();
+  const { month, year, view, archived } = resolveCalendarParams(resolvedParams);
 
   const referenceDate = new Date(year, month, 1);
 
@@ -45,6 +37,7 @@ export default async function Home({
       <main className="min-h-screen bg-gray-50 p-8">
         <h1 className="text-2xl font-bold text-gray-900">Agenda da Unidade</h1>
         <p className="mt-4 text-gray-700">Identifique-se para consultar a agenda.</p>
+        {isPasswordAuthConfigured() && <Link href="/login" className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-white">Entrar com e-mail e senha</Link>}
         {isDemoModeEnabled() && <UserSwitcher currentUser={null} />}
       </main>
     );
@@ -58,6 +51,10 @@ export default async function Home({
             Agenda da Unidade
           </h1>
         </header>
+        {!isDemoModeEnabled() && <div className="mb-6 flex items-center justify-between gap-4">
+          <p className="text-sm text-gray-700">{currentUser.name} · {currentUser.role}</p>
+          <LogoutButton />
+        </div>}
         <ArchiveFilter />
         {archived ? (
           <ArchivedTaskList tasks={tasks} currentUser={currentUser} />

@@ -52,13 +52,17 @@ O controle condicional e o histórico ficam dentro da [transação interativa do
 
 Os formulários aceitam datas civis válidas em `YYYY-MM-DD`; a persistência acrescenta `T12:00:00Z`. Filtros e classificação usam o fuso do processo/navegador. Unificar essa política de fuso ainda é uma evolução pendente.
 
-Cores: vermelho para pendências anteriores a hoje, amarelo até 15 dias, verde além disso, azul para concluídas e cinza para validadas. Indicadores contam apenas pendências no período consultado. A visão anual ainda precisa alinhar as cores de concluídas/validadas; parâmetros de mês/ano também precisam de normalização.
+Cores: vermelho para pendências anteriores a hoje, amarelo até 15 dias, verde além disso, azul para concluídas e cinza para validadas. Indicadores contam apenas pendências no período consultado. As visões mensal e anual compartilham a prioridade de cores; as marcações anuais incluem rótulos acessíveis. `calendar-params.ts` normaliza os mesmos parâmetros no servidor e no cliente: mês 0–11, ano 1900–2100 e fallback para o período atual em entradas inválidas ou repetidas. A navegação respeita os limites e preserva filtros adicionais da URL.
 
-## Sessão e limites
+## Autenticação e sessões
 
-A sessão de demonstração exige `DEMO_MODE=true` e ambiente diferente de `production`. Tanto `getCurrentUser` quanto `switchUser` aplicam essa restrição no servidor. O seletor só é renderizado quando esse modo está ativo.
+`src/lib/auth-config.ts` configura Better Auth com adaptador Prisma, login por e-mail/senha, cadastro público fechado, cookies e sessões armazenadas no banco. `src/lib/password-auth.ts` valida o segredo e a origem antes de inicializar a instância; produção exige HTTPS. A rota `/api/auth/[...all]` entrega as operações HTTP sem cache; `/login` é dinâmica para ler a configuração em runtime.
 
-O cookie `userId` é HTTP-only, Secure, SameSite=Lax, caminho `/` e duração de um dia. O ID ainda não tem prova de identidade: não há senha, provedor ou sessão assinada. Por isso, a demonstração não é aceita em produção, mesmo com a flag habilitada. Até integrar autenticação real, a versão de produção mostra a solicitação de identificação sem acesso à agenda.
+O diretório `User` mantém perfil/unidade. `AuthUser` referencia o mesmo ID e guarda a identidade; `AuthAccount` guarda o hash da senha e `AuthSession` guarda as sessões. `AuthVerification` atende ao esquema do provedor, e `AuthRateLimit` persiste contadores de tentativas. O comando administrativo usa a criptografia do Better Auth para provisionar a senha de um usuário existente e revoga todas as sessões anteriores.
+
+`getCurrentUser` verifica a sessão real e carrega o `User` atual para autorizar cada requisição. Não confia no cookie antigo `userId` quando um segredo de autenticação está configurado. O modo demonstração só funciona fora de produção, com `DEMO_MODE=true` e segredo vazio.
+
+A interface de login normaliza o e-mail, preserva a senha informada sem trim, mostra falhas genéricas e bloqueia envios simultâneos. O botão Sair só redireciona após a revogação pela API. Não há cadastro público ou recuperação por e-mail; redefinição de senha é administrativa. Detalhes de cookies, rate limit e operação em [AUTENTICACAO.md](AUTENTICACAO.md).
 
 A aplicação não expõe mais `deleteTask` nem outra operação de exclusão física. O relacionamento de histórico continua com cascata no banco para manutenção administrativa, mas nenhuma Server Action usa esse caminho.
 

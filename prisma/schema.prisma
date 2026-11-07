@@ -57,6 +57,7 @@ model User {
   unitId  String
   unit    Unit   @relation(fields: [unitId], references: [id])
   tasks   Task[] // Tarefas criadas por este user
+  identity AuthUser?
   archivedTasks Task[] @relation("TaskArchivedBy")
 
   // --- ADICIONE ESTA LINHA ---
@@ -129,4 +130,68 @@ model Employee {
 
   // O "back-relation" para sabermos de quais tarefas ele é ponto focal
   tasks Task[]  
+}
+
+// Identidades de autenticação separadas dos perfis e unidades do domínio.
+// O id é o mesmo do User administrativo: não há acesso sem esse vínculo.
+model AuthUser {
+  id            String @id
+  name          String
+  email         String @unique
+  emailVerified Boolean @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  applicationUser User @relation(fields: [id], references: [id], onDelete: Cascade)
+  sessions      AuthSession[]
+  accounts      AuthAccount[]
+}
+
+model AuthSession {
+  id        String @id
+  expiresAt DateTime
+  token     String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model AuthAccount {
+  id                    String @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model AuthVerification {
+  id         String @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([identifier])
+}
+
+model AuthRateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
 }

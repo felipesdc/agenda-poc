@@ -22,13 +22,17 @@ npm run test:watch
 | --- | --- |
 | `tests/task-input.test.ts` | Frequência padrão, todas as frequências oferecidas, deduplicação de pontos focais, título sem espaços nas extremidades, datas inexistentes, matrícula inválida e arquivos em campos de texto |
 | `tests/archive-input.test.ts` | Motivo obrigatório, limites de tamanho, espaços e tipos inválidos |
+| `tests/calendar-params.test.ts` | Mês zero, ano limitado, parâmetros vazios/malformados/duplicados e fallback seguro |
+| `tests/auth-settings.test.ts` | Segredo, URL, HTTPS em produção e indisponibilidade segura sem configuração |
+| `tests/password-auth.test.ts` | Biblioteca e SQLite reais: login, logout, expiração, cookie inválido, revogação, perfil/unidade atuais, cadastro fechado, origem e rate limit |
+| `tests/auth-ui.test.tsx` | Campos de login, mensagens genéricas, limites de tentativas, erro de conexão, envio único e logout |
 | `tests/frequency.test.ts` | Sete recorrências automáticas, NONE/EVENTUAL, final de mês, ano bissexto, passagem de ano e preservação da data original |
 | `tests/task-status.test.ts` | Pendências vencidas, hoje, limites de 15/16 dias, prioridade de concluída/validada, mudança de ano e preservação da data recebida |
 | `tests/task-actions.test.ts` | Cadastro, edição, troca/remoção de pontos focais, histórico, arquivamento e restauração sem perda de histórico, conclusão, validação pelo gestor, geração da sucessora, tarefas inexistentes, sessão ausente/inválida, troca de perfil, permissões, isolamento, transições, validação concorrente e rollback de auditoria |
 | `tests/task-ui.test.tsx` | Envio e limpeza do cadastro, preservação dos campos após falha, erros de transporte e negócio, nova tentativa, edição, histórico, confirmação/cancelamento do arquivamento e restauração, bloqueio de ações concorrentes e botões conforme perfil/unidade/estado |
 | `tests/calendar-ui.test.tsx` | Janeiro com month=0, período atual, navegação mensal/anual, passagem de ano, alternância de visão, abertura/fechamento de detalhes, doze meses, indicadores e seletor de demonstração |
 
-Resultado após o incremento 3, em 05/11/2026: **127 testes aprovados em 7 arquivos**, sem casos `todo`.
+Resultado após o incremento 4, em 07/11/2026: **187 testes aprovados em 11 arquivos**, sem casos `todo`.
 
 ## Banco isolado
 
@@ -46,7 +50,7 @@ Os componentes são renderizados no JSDOM com suas ações de servidor simuladas
 
 Foi encontrada e corrigida uma regressão em `TaskFields`: o reset nativo do formulário restaurava a periodicidade e as caixas de pontos focais após uma falha. Os defaults nativos agora acompanham a escolha atual; a limpeza após sucesso continua sendo feita pelo remount do formulário. A suíte protege esse comportamento no cadastro e na edição.
 
-As setas de navegação ainda não têm nomes acessíveis; seus testes usam a ordem dos botões, com essa limitação explícita no arquivo. Adicionar rótulos faz parte da evolução de acessibilidade.
+As setas agora têm nomes acessíveis. Os testes de navegação verificam o conteúdo dos parâmetros sem depender da ordem de serialização da URL e confirmam o bloqueio nos anos-limite.
 
 ## Controles do incremento 2
 
@@ -57,9 +61,9 @@ Os cinco `todo` anteriores foram substituídos por testes executáveis:
 - Edição/conclusão exigem PENDING e validação exige COMPLETED.
 - Validação sequencial e simultânea gera uma única sucessora, com pontos focais; uma segunda inserção com a mesma origem também falha pela restrição do banco.
 - Triggers temporárias do SQLite provocam falhas na auditoria de criação, edição, conclusão, validação e criação da sucessora. Os testes comparam tarefas, vínculos e histórico antes/depois e exigem rollback completo.
-- `DEMO_MODE=false` bloqueia sessão e troca de usuário. Produção também bloqueia essas operações mesmo com a flag habilitada.
+- No modo de demonstração, `DEMO_MODE=false` bloqueia sessão e troca de usuário. Produção sempre bloqueia a sessão simulada. O incremento 4 adiciona a sessão real por senha, independente desse cookie antigo.
 
-Autenticação real, política de lotação dos funcionários e testes em navegador real continuam fora do escopo entregue. O teste de concorrência usa requisições simultâneas no mesmo processo com SQLite real; a restrição única no banco fornece a garantia adicional entre processos.
+Política de lotação dos funcionários, recuperação de senha por e-mail, MFA e testes em navegador real continuam fora do escopo entregue. O teste de concorrência usa requisições simultâneas no mesmo processo com SQLite real; a restrição única no banco fornece a garantia adicional entre processos.
 
 
 ## Controles do incremento 3
@@ -67,3 +71,12 @@ Autenticação real, política de lotação dos funcionários e testes em navega
 A integração verifica preservação de dados, autor/data/motivo, restauração de cada estado, histórico permanente, proibição de mutações arquivadas, consultas por unidade em todos os períodos e ausência de exclusão física na API. Testes simultâneos exigem uma única gravação de ARCHIVE/RESTORE. Triggers SQLite também provocam falhas nessas duas ações para confirmar rollback de metadados e histórico.
 
 Na interface, os testes verificam abertura e cancelamento do formulário de motivo, campos obrigatórios, erros e nova tentativa, bloqueio durante o processamento, permissões da restauração e navegação entre ativas/arquivadas preservando o período.
+
+
+## Controles do incremento 4
+
+Os testes de autenticação usam Better Auth e Prisma reais, com um SQLite novo por execução. Só os headers do contexto Next e o acesso ao cliente dessa base são adaptados para testar `getCurrentUser`; hashing, assinatura do cookie, persistência, consulta da sessão e revogação não são simulados. Os testes de configuração e componentes usam ambientes isolados, sem segredos de usuários reais.
+
+Foram testados também provisionamento por stdin e o fluxo HTTP contra o servidor Next: tela de login, emissão de cookie, acesso autenticado, redirecionamento de usuário já autenticado e logout. Isso complementa JSDOM e handler direto, sem substituir uma revisão em navegador real.
+
+A verificação foi executada com Node 22.23.4. O mínimo do projeto passou a ser Node 20.19 por compatibilidade com as dependências de autenticação.

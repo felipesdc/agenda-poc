@@ -8,32 +8,22 @@ import {
   Grid,
 } from "lucide-react";
 import { format, addMonths, subMonths, addYears, subYears } from "date-fns";
+import { resolveCalendarParams, MIN_CALENDAR_YEAR, MAX_CALENDAR_YEAR } from "@/lib/calendar-params";
 import { ptBR } from "date-fns/locale";
 
 export default function DateFilter() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // --- CORREÇÃO AQUI ---
-  // Não usamos mais "||", verificamos se o parâmetro existe.
-  const rawMonth = searchParams.get("month");
-  const rawYear = searchParams.get("year");
-
-  const now = new Date();
-
-  // Se rawMonth for null (não tem na URL), usa o mês atual.
-  // Se for '0', '1', etc, converte para número.
-  const month = rawMonth !== null ? Number(rawMonth) : now.getMonth();
-  const year = rawYear !== null ? Number(rawYear) : now.getFullYear();
-  // ---------------------
-
+  const { month, year, view } = resolveCalendarParams({
+    month: searchParams.getAll("month"), year: searchParams.getAll("year"), view: searchParams.getAll("view"),
+  });
   const currentDate = new Date(year, month, 1);
-
-  // A lógica de view continua igual, mas vamos garantir o fallback
-  const view = searchParams.get("view") === "year" ? "year" : "month";
+  const atStart = year === MIN_CALENDAR_YEAR && (view === "year" || month === 0);
+  const atEnd = year === MAX_CALENDAR_YEAR && (view === "year" || month === 11);
 
   const updateUrl = (newDate: Date, newView: string) => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString());
     params.set("view", newView);
     params.set("month", newDate.getMonth().toString());
     params.set("year", newDate.getFullYear().toString());
@@ -41,11 +31,13 @@ export default function DateFilter() {
   };
 
   const handlePrev = () => {
+    if (atStart) return;
     if (view === "month") updateUrl(subMonths(currentDate, 1), view);
     else updateUrl(subYears(currentDate, 1), view);
   };
 
   const handleNext = () => {
+    if (atEnd) return;
     if (view === "month") updateUrl(addMonths(currentDate, 1), view);
     else updateUrl(addYears(currentDate, 1), view);
   };
@@ -57,6 +49,7 @@ export default function DateFilter() {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           <button
+            aria-pressed={view === "month"}
             onClick={() => toggleView("month")}
             className={`p-2 rounded-md text-sm font-medium transition-all ${
               view === "month"
@@ -68,6 +61,7 @@ export default function DateFilter() {
             Mês
           </button>
           <button
+            aria-pressed={view === "year"}
             onClick={() => toggleView("year")}
             className={`p-2 rounded-md text-sm font-medium transition-all ${
               view === "year"
@@ -89,6 +83,8 @@ export default function DateFilter() {
 
       <div className="flex gap-2">
         <button
+          aria-label={view === "month" ? "Mês anterior" : "Ano anterior"}
+          disabled={atStart}
           onClick={handlePrev}
           className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors"
         >
@@ -96,6 +92,8 @@ export default function DateFilter() {
         </button>
 
         <button
+          aria-label={view === "month" ? "Próximo mês" : "Próximo ano"}
+          disabled={atEnd}
           onClick={handleNext}
           className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors"
         >
