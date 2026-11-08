@@ -1,26 +1,77 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --background: #f5f7fb;
+  --foreground: #172337;
+  --surface: #ffffff;
+  --muted: #edf1f7;
+  --gray-50: #f5f7fb;
+  --gray-100: #edf1f7;
+  --gray-200: #dce3ed;
+  --gray-300: #bbc7d7;
+  --gray-400: #5d6d83;
+  --gray-500: #596b82;
+  --gray-600: #495b72;
+  --gray-700: #34465e;
+  --gray-800: #24364e;
+  --gray-900: #172337;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0c1422;
+  --foreground: #e5edf8;
+  --surface: #141f30;
+  --muted: #1d2b40;
+  --gray-50: #0c1422;
+  --gray-100: #1d2b40;
+  --gray-200: #2d3d54;
+  --gray-300: #455771;
+  --gray-400: #91a3bb;
+  --gray-500: #a6b6cc;
+  --gray-600: #b8c6d9;
+  --gray-700: #cad6e6;
+  --gray-800: #dce5f2;
+  --gray-900: #eef3fb;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-gray-50: var(--gray-50);
+  --color-gray-100: var(--gray-100);
+  --color-gray-200: var(--gray-200);
+  --color-gray-300: var(--gray-300);
+  --color-gray-400: var(--gray-400);
+  --color-gray-500: var(--gray-500);
+  --color-gray-600: var(--gray-600);
+  --color-gray-700: var(--gray-700);
+  --color-gray-800: var(--gray-800);
+  --color-gray-900: var(--gray-900);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@layer base {
+  * { border-color: var(--gray-200); }
+  body { background: var(--background); color: var(--foreground); font-family: var(--font-geist-sans), system-ui, sans-serif; }
+  button:not(:disabled), select, summary { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { background-color: var(--surface); color: var(--foreground); }
+  input, select, textarea { accent-color: #2563eb; }
+  input::placeholder, textarea::placeholder { color: var(--gray-400); }
+  input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="true"] { border-color: #ef4444; }
+  ::selection { background: #2563eb; color: white; }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.skip-link { position: fixed; top: .75rem; left: 1rem; z-index: 100; transform: translateY(-180%); padding: .75rem 1rem; border-radius: .5rem; background: var(--surface); color: var(--foreground); }
+.skip-link:focus { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useEffectEvent, useId } from "react";
 import { Task, TaskHistory, User, Employee } from "@prisma/client"; // Importe os tipos
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -72,6 +72,27 @@ export default function TaskModal({
   const isRestoring = pendingAction === "restore";
   const isCompleting = pendingAction === "complete";
   const isValidating = pendingAction === "validate";
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogTitleId = useId();
+  const closeFromKeyboard = useEffectEvent(() => { if (!isBusy) onClose(); });
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeFromKeyboard(); }
+      if (event.key !== "Tab") return;
+      const elements = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') || []);
+      const first = elements[0]; const last = elements.at(-1);
+      if (!first) { event.preventDefault(); dialogRef.current?.focus(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialogRef.current)) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", keydown);
+    return () => { document.removeEventListener("keydown", keydown); document.body.style.overflow = previousOverflow; if (previousFocus?.isConnected) previousFocus.focus(); };
+  }, [isOpen]);
 
   const runAction = async (action: "archive" | "restore" | "complete" | "validate") => {
     if (actionInFlight.current || isPending) return;
@@ -109,14 +130,14 @@ export default function TaskModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={dialogTitleId} tabIndex={-1} className="bg-surface rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90dvh] outline-none">
         {/* Header com Abas */}
         <div className={cn("px-6 pt-4 pb-0 border-b", headerColorClass)}>
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h3 className="text-lg font-bold text-gray-900/80">Tarefa</h3>
+              <h3 id={dialogTitleId} className="text-lg font-bold text-gray-900">Tarefa</h3>
               <span className="text-xs font-medium uppercase opacity-60 tracking-wider">
-                {task.status}
+                {{ PENDING: "Pendente", COMPLETED: "Concluída", VALIDATED: "Validada" }[task.status]}
               </span>
             </div>
             <button
@@ -157,7 +178,7 @@ export default function TaskModal({
         </div>
 
         <div className="p-6 overflow-y-auto" aria-busy={isBusy}>
-          {actionError && <p role="alert" className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">{actionError}</p>}
+          {actionError && <p role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm rounded">{actionError}</p>}
           {activeTab === "details" ? (
             /* --- CONTEÚDO DA ABA DETALHES --- */
             !isEditing ? (
@@ -188,7 +209,7 @@ export default function TaskModal({
                           {task.focalPoints.map((emp) => (
                             <span
                               key={emp.id}
-                              className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100"
+                              className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800"
                             >
                               {emp.name}
                             </span>
@@ -210,7 +231,7 @@ export default function TaskModal({
                   )}
                 </div>
 
-                {task.archivedAt && <section className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900" aria-label="Arquivamento">
+                {task.archivedAt && <section className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-900 dark:text-amber-300" aria-label="Arquivamento">
                   <p className="font-semibold">Tarefa arquivada</p>
                   <p>Em {format(new Date(task.archivedAt), "dd/MM/yyyy 'às' HH:mm")}</p>
                   <p>Por: {task.archivedBy?.name || task.history.find((log) => log.action === "ARCHIVE" && log.userId === task.archivedById)?.user.name || "Usuário registrado no histórico"}</p>
@@ -219,7 +240,7 @@ export default function TaskModal({
                 {showArchiveForm && canArchiveTask(currentUser, task) && <form
                   onSubmit={(event) => { event.preventDefault(); void runAction("archive"); }}
                   aria-label="Arquivar tarefa"
-                  className="p-3 border border-amber-200 rounded-lg space-y-3"
+                  className="p-3 border border-amber-200 dark:border-amber-800 rounded-lg space-y-3"
                 >
                   <label className="block text-sm font-medium text-gray-700">
                     Motivo do arquivamento
@@ -252,7 +273,7 @@ export default function TaskModal({
 
                   {!task.archivedAt && task.status === "COMPLETED" && (
                     <div className="space-y-2">
-                      <div className="p-3 bg-blue-50 text-blue-800 text-sm rounded border border-blue-100 flex items-center gap-2">
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 text-sm rounded border border-blue-100 dark:border-blue-800 flex items-center gap-2">
                         <CheckCircle className="w-4 h-4" />
                         Aguardando validação da gerência.
                       </div>
@@ -291,7 +312,7 @@ export default function TaskModal({
                   {canEditTask(currentUser, task) && <button
                     disabled={isBusy}
                     onClick={() => setIsEditing(true)}
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded-lg font-medium transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 py-2 rounded-lg font-medium transition-colors"
                   >
                     <Edit2 className="w-4 h-4" /> Editar
                   </button>}
@@ -299,7 +320,7 @@ export default function TaskModal({
                     type="button"
                     onClick={() => setShowArchiveForm(true)}
                     disabled={isBusy}
-                    className="flex items-center justify-center gap-2 bg-amber-50 text-amber-800 hover:bg-amber-100 px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 px-4 py-2 rounded-lg font-medium disabled:opacity-50"
                   >
                     <Archive className="w-4 h-4" /> Arquivar tarefa
                   </button>}
@@ -307,7 +328,7 @@ export default function TaskModal({
                     type="button"
                     onClick={handleRestore}
                     disabled={isBusy}
-                    className="flex items-center justify-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 px-4 py-2 rounded-lg font-medium disabled:opacity-50"
                   >
                     {isRestoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArchiveRestore className="w-4 h-4" />} Restaurar tarefa
                   </button>}
@@ -317,7 +338,7 @@ export default function TaskModal({
               // MODO EDIÇÃO
               <form action={formAction} aria-busy={isPending} className="space-y-4">
                 <TaskFields task={task} employees={employees} errors={state.errors} disabled={isBusy} />
-                {!state.success && state.message && <p role="alert" className="p-3 bg-red-50 text-red-700 text-sm rounded">{state.message}</p>}
+                {!state.success && state.message && <p role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm rounded">{state.message}</p>}
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
@@ -357,7 +378,7 @@ export default function TaskModal({
                     className="relative pl-6 border-l-2 border-gray-100 last:border-0 pb-1"
                   >
                     {/* Bolinha da Timeline */}
-                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-blue-50 border-2 border-blue-200 flex items-center justify-center">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-blue-50 dark:bg-blue-950/40 border-2 border-blue-200 dark:border-blue-800 flex items-center justify-center">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
                     </div>
 

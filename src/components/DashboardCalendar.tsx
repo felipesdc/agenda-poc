@@ -50,11 +50,11 @@ export default function DashboardCalendar({
           employees={employees}
         />
       )}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
+      <div className="bg-surface rounded-xl shadow-sm border p-3 sm:p-6 overflow-x-auto" role="region" aria-label="Calendário mensal" tabIndex={0}>
         {/* CORREÇÃO AQUI: 
          Adicionei o wrapper 'grid grid-cols-7' para forçar o layout de 7 colunas.
       */}
-        <div className="grid grid-cols-7 gap-1 text-center text-sm">
+        <div className="grid min-w-[560px] grid-cols-7 gap-1 text-center text-sm">
           {/* Cabeçalho dos dias da semana */}
           {weekDays.map((d) => (
             <div key={d} className="font-medium text-gray-400 py-2">
@@ -81,7 +81,7 @@ export default function DashboardCalendar({
               <div
                 key={idx}
                 className={cn(
-                  "h-24 w-full flex flex-col items-start justify-start p-2 rounded-md border transition-all relative group",
+                  "min-h-28 w-full flex flex-col items-start justify-start p-2 rounded-md border transition-all relative group",
                   !isCurrentMonth ? "opacity-40 bg-gray-50" : "",
                   colorClass
                     ? colorClass
@@ -106,7 +106,7 @@ export default function DashboardCalendar({
                       style={{
                         backgroundColor: colorClass
                           ? "rgba(255,255,255,0.25)"
-                          : "#f3f4f6",
+                          : "var(--muted)",
                       }}
                     >
                       {/* Bolinha de status individual (opcional, ajuda a identificar se tiver mix de cores no dia) */}

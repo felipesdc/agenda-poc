@@ -46,7 +46,7 @@ beforeEach(async () => {
   await database.task.deleteMany();
   await database.authSession.deleteMany();
   await database.authRateLimit.deleteMany();
-  await database.user.update({ where: { id: "actor" }, data: { role: "OPERATOR", unitId: "unit" } });
+  await database.user.update({ where: { id: "actor" }, data: { role: "OPERATOR", unitId: "unit", isActive: true } });
   await provisionPassword(database, "actor@test.invalid", password);
 });
 
@@ -186,5 +186,27 @@ describe("autenticação por senha", () => {
     await expect(provisionPassword(database, "missing@test.invalid", password)).rejects.toThrow("Usuário não encontrado");
     await expect(provisionPassword(database, "actor@test.invalid", "curta")).rejects.toThrow();
     expect(await database.authUser.count()).toBe(1);
+  });
+});
+
+
+describe("contas desativadas no login real", () => {
+  it("não cria sessão para conta desativada e permite novo login após reativação", async () => {
+    await database.user.update({ where: { id: "actor" }, data: { isActive: false } });
+    const response = await request("/sign-in/email", { email: "actor@test.invalid", password });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("set-cookie") || "").not.toContain("session_token=");
+    expect(await database.authSession.count()).toBe(0);
+    await database.user.update({ where: { id: "actor" }, data: { isActive: true } });
+    await login();
+  });
+  it("recusa sessão existente se a conta estiver desativada mesmo sem apagar o cookie", async () => {
+    const { cookies } = await login();
+    context.headers = new Headers({ cookie: cookies });
+    expect(await currentUser()).not.toBeNull();
+    await database.user.update({ where: { id: "actor" }, data: { isActive: false } });
+    expect(await currentUser()).toBeNull();
+    const actions = await import("../src/actions");
+    expect((await actions.createTask({ message: "" }, taskForm())).success).toBe(false);
   });
 });

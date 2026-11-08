@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Qualidade e migrações
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: file:${{ runner.temp }}/agenda-ci.db
+      DEMO_MODE: "false"
+      BETTER_AUTH_SECRET: ""
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Instalar dependências pelo lockfile
+        run: npm ci
+      - name: Preparar banco vazio e cliente Prisma
+        run: |
+          touch "$RUNNER_TEMP/agenda-ci.db"
+          npm run db:prepare
+      - name: Conferir migrações aplicadas
+        run: npm run db:status
+      - name: Conferir banco contra o schema
+        run: npm run db:check
+      - name: Validar schema Prisma
+        run: npx prisma validate
+      - name: Analisar código
+        run: npm run lint
+      - name: Executar testes
+        run: npm test
+      - name: Gerar build de produção
+        run: npm run build -- --webpack
+      - name: Verificar tipos
+        run: npm run typecheck

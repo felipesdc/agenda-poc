@@ -1,0 +1,3 @@
+ALTER TABLE "User" ADD COLUMN "isActive" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "UserAudit" ADD COLUMN "activeBefore" BOOLEAN;
+ALTER TABLE "UserAudit" ADD COLUMN "activeAfter" BOOLEAN;

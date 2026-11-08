@@ -15,7 +15,7 @@ export async function getCurrentUser(): Promise<User | null> {
     const session = await getPasswordAuth().api.getSession({ headers: await headers() });
     if (!session) return null;
     // O perfil e a unidade vêm do diretório atual, nunca do cookie ou de dados do cliente.
-    return prisma.user.findUnique({ where: { id: session.user.id } });
+    return prisma.user.findFirst({ where: { id: session.user.id, isActive: true } });
   }
   if (!isDemoModeEnabled()) return null;
   const cookieStore = await cookies(); // Next.js 15 exige await
@@ -24,8 +24,8 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!userId) return null;
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    const user = await prisma.user.findFirst({
+      where: { id: userId, isActive: true },
     });
     return user;
   } catch {

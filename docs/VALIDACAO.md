@@ -93,3 +93,62 @@ Veja [TESTES.md](TESTES.md) para comandos, cobertura e limites. Nenhuma regra de
 - Servidor Next em localhost: agenda anônima pede identificação; `/login` entrega formulário; POST de login retorna 200 e cookie de sessão; GET da agenda autenticada retorna 200 sem seletor de demonstração; GET de `/login` autenticado retorna 307 para a agenda; POST de logout retorna 200 e a agenda volta a exigir identificação.
 - Host de automação de navegador indisponível. A revisão visual em navegador real continua pendente; as interações do formulário foram verificadas em JSDOM e o transporte em HTTP real.
 - Banco original e arquivos locais de segredos não alterados. Configuração e operação detalhadas em [AUTENTICACAO.md](AUTENTICACAO.md).
+
+## Incremento 5 — CI e preparação do banco (07/11/2026)
+
+- Validação local com Node 22: lint, tipos, 187 testes em 11 arquivos e `npm run build -- --webpack` aprovados.
+- SQLite temporário vazio: seis migrações aplicadas por `db:prepare`, `db:status` atualizado, `db:check` sem diferenças e `prisma validate` aprovado. O arquivo vazio foi criado explicitamente antes das migrações, como no workflow.
+- Contraprova: uma cópia temporária teve a tabela AuthRateLimit removida; `db:check` detectou a diferença e retornou código 2.
+- Workflow configurado para GitHub Actions, ainda sem execução remota nesta entrega. A instalação limpa `npm ci` será executada no runner; não foi repetida sobre o node_modules local.
+- O banco local já migrado durante a correção do erro P2022 não foi usado nessas verificações.
+
+## Incremento 6 — gestão administrativa (07/11/2026)
+
+- 200 testes aprovados em 12 arquivos; novos casos de gestão usam SQLite temporário e componentes em JSDOM.
+- Autorização de consultas e mutações, isolamento de unidade, validação/duplicação de e-mail, proteção do próprio gestor, sincronização/revogação e rollback verificados.
+- Build `npm run build -- --webpack` aprovado com rota dinâmica `/usuarios`; lint e tipos verificados com Node 22.
+- Sem nova migração e sem alterações no banco local neste incremento. Validação visual em navegador e transporte HTTP de Server Actions não foram executados para esta tela.
+
+## Incremento 7 — auditoria administrativa (07/11/2026)
+
+- 206 testes aprovados em 12 arquivos, lint e tipos aprovados com Node 22; build `npm run build -- --webpack` aprovado.
+- Testes com SQLite temporário verificam autoria/snapshots, retenção, permissões/unidade, limite de consulta, ausência de eventos sem mudanças e rollback após falha de auditoria.
+- Backup local em `/private/tmp/agenda-poc-before-user-audit-20261107-214615.db`; migração aditiva aplicada por `db:prepare` e `db:check` sem diferenças.
+- Comparação de todos os registros nas 11 tabelas preexistentes confirmou preservação dos dados; tabela UserAudit local inicialmente vazia.
+- A consulta renderiza no servidor; não houve validação visual em navegador deste histórico. A auditoria não cobre seed, provisionamento CLI ou alterações diretas no banco.
+
+## Incremento 8 — desativação e reativação (07/11/2026)
+
+- 219 testes aprovados em 12 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Integração com SQLite e handler real de autenticação verifica rejeição de login desativado, bloqueio por sessão antiga e novo login após reativação. Casos adicionais cobrem demo, permissões, confirmação, repetição, preservação de hash e rollback.
+- Backup local em `/private/tmp/agenda-poc-before-activation-20261107-215607.db`; `db:prepare` aplicou migração aditiva e `db:check` não encontrou diferenças.
+- Comparação de todas as colunas anteriores nas 12 tabelas preexistentes confirmou preservação dos dados; contas locais existentes permaneceram ativas.
+- Testes de interface usam JSDOM; não houve validação visual em navegador neste incremento.
+
+## Incremento 9 — visão anual interativa (07/11/2026)
+
+- 225 testes aprovados em 12 arquivos, incluindo seis novos cenários anuais; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Modal real compartilhado exercitado em JSDOM com ações de servidor simuladas: detalhes, histórico, edição com falha/sucesso, visualizador e validação pelo gestor.
+- Lista acompanha tarefas revalidadas após mudança de prazo; consulta mantém separação por ano e link para o mês correto. Sem migração ou alteração de dados locais neste incremento.
+- Tentativa de inspeção no navegador encontrou `The browser access host is unavailable`; não foi realizada validação visual no navegador.
+
+## Incremento 10 — detalhes pelos quadros de prazo (07/11/2026)
+
+- 232 testes aprovados em 12 arquivos, incluindo sete novos cenários para os quadros; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Cada faixa abre lista e modal reais em JSDOM; testes verificam histórico, edição, visualizador, atualização após conclusão, exclusão de estados não aplicáveis, teclado e fechamento.
+- Sem migração nem alteração dos dados locais. A lista usa somente o período consultado na agenda. Não houve validação visual em navegador neste incremento.
+
+## Incremento 11 — lista com busca e filtros (07/11/2026)
+
+- 252 testes aprovados em 13 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22. Rota `/tarefas` dinâmica incluída no build.
+- Dez casos de parâmetros, seis de consulta SQLite e quatro de interação adicionados: busca por título/descrição, estado, vencidas históricas, isolamento, paginação, modal e permissões.
+- Sem migração nem alteração do banco local. Busca de texto segue contains do SQLite; acentos não são normalizados.
+- Interface validada em JSDOM com ações simuladas; não foi realizada validação visual em navegador nem submissão HTTP do formulário GET nesta entrega.
+
+## Incremento 12 — UX/UI e temas (07/11/2026)
+
+- 257 testes aprovados em 14 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Tema: três novos testes de preferência/persistência/sistema. Modal: dois novos testes de diálogo, Escape, foco e rolagem.
+- Inspeção no Chrome via controles nativos: lista em claro/escuro, abertura por teclado, detalhes e campos de edição em escuro, Escape fechando e devolvendo foco à tarefa. Sem salvar mudanças em tarefas. Preferência restaurada para Sistema.
+- Contrastes calculados para pares neutros: texto principal claro/superfície 15,77:1; secundário claro/fundo 5,09:1; texto suave claro/fundo 4,92:1; principal escuro/superfície 14,86:1; secundário escuro/superfície 8,03:1. São pares específicos, não uma certificação de acessibilidade da aplicação.
+- Layouts de telas menores ajustados no código; não foi realizada inspeção em dispositivo móvel. Sem migração ou alteração de dados de negócio neste incremento.

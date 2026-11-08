@@ -82,3 +82,11 @@ Para continuar usando a troca de perfis sem senha localmente, mantenha `BETTER_A
 Os testes usam a biblioteca real, SQLite temporário e o handler HTTP: login válido/inválido, cookie forjado, expiração, logout, atualização de perfil, revogação após redefinição, bloqueio de cadastro/origem externa, limite de tentativas e cookie Secure em HTTPS.
 
 O fluxo também foi exercitado contra o servidor Next com um banco copiado e segredo efêmero. O comando de provisionamento foi executado sobre essa cópia. O banco original e as senhas de usuários reais não foram alterados. Navegador real não foi verificado: o host de automação estava indisponível. As interações dos componentes estão cobertas no JSDOM.
+
+## Cadastro pela interface
+
+Gestores podem criar o perfil de usuários da própria unidade em `/usuarios`, antes do provisionamento de senha. A edição de nome/perfil sincroniza a identidade e revoga sessões em uma transação. A consulta da sessão continua buscando o perfil atual no domínio. E-mail/unidade permanecem fixos; a tela permite desativar/reativar, sem exclusão física.
+
+## Contas desativadas
+
+O gestor pode desativar outras contas de sua unidade em `/usuarios`. A alteração revoga sessões, bloqueia a criação de novas sessões por senha e impede o uso da sessão demo. A leitura do usuário autenticado exige isActive=true em cada acesso. O login mantém mensagem genérica para falha. A reativação exige novo login e preserva a senha existente. Provisionar/redefinir senha não reativa contas.

@@ -289,3 +289,24 @@ describe("interface de arquivamento e restauração", () => {
     expect(actions.archiveTask).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("acessibilidade do modal", () => {
+  it("identifica diálogo e fecha por Escape", async () => {
+    const { user, onClose } = openModal();
+    expect(screen.getByRole("dialog", { name: "Tarefa" }).getAttribute("aria-modal")).toBe("true");
+    expect(document.body.style.overflow).toBe("hidden");
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+  it("mantém Tab no diálogo e restaura foco e rolagem ao fechar", async () => {
+    const trigger = document.createElement("button"); document.body.append(trigger); trigger.focus();
+    const { unmount } = render(<TaskModal task={taskFixture()} isOpen onClose={vi.fn()} currentUser={operator} employees={employees} />);
+    const user = userEvent.setup();
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Fechar tarefa" }));
+    await user.tab({ shift: true });
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    unmount(); expect(document.activeElement).toBe(trigger); expect(document.body.style.overflow).toBe(""); trigger.remove();
+  });
+});

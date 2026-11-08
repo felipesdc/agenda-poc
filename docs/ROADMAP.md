@@ -34,7 +34,7 @@ Os incrementos 3 e 4 abaixo entregam arquivamento e autenticação por senha. O 
 - Restauração exclusiva do gestor mantém prazo, estado e recorrência; ações usam transações, guardas contra repetição e auditoria atômica.
 - Migração aditiva, testes de permissões, restauração, consultas, concorrência e rollback.
 
-O incremento 4 abaixo entrega login por senha, normalização de mês/ano e cores anuais. CI, gestão de usuários e revisão operacional continuam pendentes.
+O incremento 4 abaixo entrega login por senha, normalização de mês/ano e cores anuais. O incremento 5 entrega CI; gestão de usuários e revisão operacional continuam pendentes.
 
 ## Incremento 4 entregue — autenticação por senha e calendário
 
@@ -45,7 +45,74 @@ O incremento 4 abaixo entrega login por senha, normalização de mês/ano e core
 - Filtros de mês/ano normalizados no servidor e na interface, intervalo 1900–2100, botões com nomes acessíveis e navegação dentro dos limites.
 - Mesma prioridade de cores na visão mensal/anual; concluídas em azul e validadas em cinza, com rótulos acessíveis nas marcações anuais.
 
-Próximos incrementos: CI, gestão administrativa de usuários, revisão de dependências e preparação operacional do piloto. Recuperação de senha por e-mail, MFA e definição dos proxies confiáveis ainda não foram implementados. A redefinição atual é administrativa.
+Próximos incrementos: gestão administrativa de usuários, revisão de dependências e preparação operacional do piloto. Recuperação de senha por e-mail, MFA e definição dos proxies confiáveis ainda não foram implementados. A redefinição atual é administrativa.
+
+## Incremento 5 entregue — integração contínua e preparação do banco
+
+- GitHub Actions em pull requests, pushes na main e execução manual, com permissão somente de leitura.
+- Node alinhado à `.nvmrc`, instalação pelo lockfile, lint, testes, build e tipos.
+- SQLite temporário vazio, aplicação das migrações e comparação com o schema para detectar migração esquecida.
+- Comandos explícitos de preparação, situação e comparação do banco; orientação para o erro P2022 sem reset de dados.
+- Execução remota depende do envio do workflow ao GitHub; proteção de branch é configuração do repositório.
+
+## Incremento 6 entregue — gestão administrativa de usuários
+
+- Tela `/usuarios` com listagem, cadastro de nome/e-mail/perfil e edição de nome/perfil na unidade da sessão.
+- Acesso exclusivo do gestor, validação no servidor, e-mail normalizado sem duplicação e bloqueio do próprio rebaixamento.
+- Nome sincronizado com identidade e sessões revogadas atomicamente após edição.
+- Situação de provisionamento visível; senhas continuam provisionadas pelo terminal, sem senha padrão.
+- Testes de autorização, isolamento, validação, rollback e formulários.
+
+## Incremento 7 entregue — auditoria administrativa
+
+- Registros de cadastro/edição na mesma transação da alteração de perfil, identidade e sessões.
+- Autoria, data e snapshots de nome/perfil; sem eventos ao salvar sem mudanças.
+- Consulta dos últimos 100 eventos da unidade, exclusiva do gestor, na tela de usuários.
+- Migração aditiva e testes de isolamento, retenção, limites e rollback.
+- Cobertura limitada às ações da interface, sem reconstruir histórico anterior ou auditar CLI/seed.
+
+## Incremento 8 entregue — desativação e reativação de contas
+
+- Situação ativa/desativada na tela de usuários, com confirmação e restrição à própria unidade.
+- Autodesativação bloqueada; gestor desativado perde acesso administrativo.
+- Sessões revogadas e login real/demo bloqueados; reativação permite novo login sem recuperar sessões antigas.
+- Transições auditadas atomicamente, preservando senha, tarefas e vínculos.
+- Migração aditiva mantém contas existentes ativas e testes cobrem permissões, autenticação, interface e rollback.
+
+Próximos passos: revisão de dependências e preparação operacional do piloto; busca e filtros de tarefas como próxima melhoria de produto.
+
+## Incremento 9 entregue — visão anual interativa
+
+- Dias com tarefas selecionáveis, lista completa do dia e contadores por mês.
+- Mesmo TaskModal da visão mensal, recebendo usuário, funcionários e tarefas com histórico.
+- Detalhes, histórico e ações respeitam as permissões já implementadas.
+- Atalho para abrir o mês e atualização da seleção a partir dos dados revalidados.
+- Testes de consulta, edição com falha/sucesso, visualizador, validação pelo gestor, mudança de prazo e ano.
+
+## Incremento 10 entregue — detalhes pelos quadros de prazo
+
+- Quadros de vencidas, atenção e no prazo expandem listas por clique, toque e teclado.
+- Lista ordenada por prazo, restrita a pendências ativas do período da agenda.
+- Modal compartilhado para detalhes, histórico, edição e ações conforme perfil.
+- Revalidação atualiza contadores/listas; testes de todas as faixas, edição, visualizador e teclado.
+
+## Incremento 11 entregue — lista com busca e filtros
+
+- Rota `/tarefas`, acessível pela agenda, consulta tarefas ativas da unidade em todos os períodos.
+- Busca por título/descrição, estado e opção Todas as vencidas, incluindo meses e anos anteriores.
+- Paginação de 25 resultados com filtros na URL e ordenação estável por prazo/id.
+- Modal compartilhado para consulta e ações conforme perfil.
+- Testes de parâmetros, consulta real com SQLite, isolamento, paginação e interface.
+- Filtros por ponto focal/intervalo de datas e busca sem acentos ficam para evolução posterior.
+
+## Incremento 12 entregue — consistência visual, temas e acessibilidade
+
+- Temas Sistema/Claro/Escuro, preferência local e cores de superfície/texto compartilhadas.
+- Ajustes de contraste para formulários, cartões, calendários, listas, login, arquivo e gestão de usuários.
+- Cabeçalho com navegação e indicação da página atual; espaçamentos e layouts responsivos.
+- Calendário mensal com rolagem em telas estreitas e dias que crescem; anual com largura disponível.
+- Modal com foco inicial/restauração, contenção de Tab, Escape e bloqueio da rolagem de fundo.
+- Verificação visual no Chrome nativo dos temas claro/escuro, detalhes e edição, sem salvar alterações.
 
 ## Etapa 1 — Escopo original e pendências
 
@@ -83,7 +150,7 @@ Acesso a tarefas de outras unidades é bloqueado. O gestor pode validar a própr
 ## Etapa 3 — Qualidade e operação
 
 - **Testes de negócio:** permissões com duas unidades e três perfis; transições; validação repetida/concorrente; rollback de auditoria; recorrência em fim de mês e ano bissexto; prazos em fusos diferentes. Usar banco temporário separado do banco local.
-- **CI:** instalação pelo lockfile, geração do Prisma, lint, tipos, testes e build. Verificar migrações em banco vazio. Não existe pipeline atualmente.
+- **CI:** instalação pelo lockfile, geração do Prisma, lint, tipos, testes e build. Verificar migrações em banco vazio. Pipeline implementado no incremento 5.
 - **Banco e configuração:** deixar de versionar `prisma/dev.db` em uma mudança explícita, mantendo migrações e seed; usar singleton em todos os acessos; avaliar índice por unidade/prazo e histórico por tarefa/data com consultas reais.
 - **Operação:** erros estruturados com contexto, sem dados sensíveis; backup e exercício de restauração. Definir hospedagem e persistência antes de decidir se SQLite continua adequado ou se PostgreSQL será necessário.
 - **Dependências:** revisar versões e avisos de segurança antes do piloto, com consulta às fontes oficiais no momento da atualização. Esta análise não é uma auditoria de vulnerabilidades.
@@ -102,4 +169,4 @@ Acesso a tarefas de outras unidades é bloqueado. O gestor pode validar a própr
 
 ## Primeiro incremento recomendado
 
-Com login, autorização e integridade implementados, priorizar CI e gestão de usuários, seguidas da revisão de dependências e preparação operacional antes do piloto. Lembretes e integrações vêm após estabilizar esse fluxo.
+Com login, autorização e integridade implementados, priorizar gestão de usuários, seguidas da revisão de dependências e preparação operacional antes do piloto. Lembretes e integrações vêm após estabilizar esse fluxo.

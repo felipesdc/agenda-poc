@@ -49,7 +49,7 @@ export default function LoginForm() {
         <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">Senha</label>
         <input id="login-password" type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} disabled={pending} className="mt-1 w-full rounded-md border border-gray-300 p-2 text-gray-900" />
       </div>
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
       <button type="submit" disabled={pending} className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50">{pending ? "Entrando..." : "Entrar"}</button>
       <p className="text-xs text-gray-600">Para obter acesso ou redefinir sua senha, contate o administrador da unidade.</p>
     </form>

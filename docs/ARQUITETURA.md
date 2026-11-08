@@ -77,3 +77,43 @@ A restauração limpa os três campos de arquivamento ativo e mantém o históri
 A agenda e seus indicadores consultam somente tarefas ativas do período selecionado. A visão `?archived=true` consulta todas as arquivadas da unidade, ordenadas pelo arquivamento mais recente, sem filtro de prazo. O seletor preserva o período da agenda para o retorno. O diretório de funcionários não é carregado no arquivo. Operadores e visualizadores podem consultar os detalhes e histórico, mas só gestores recebem a ação de restaurar.
 
 A migração de arquivamento é aditiva: tarefas existentes permanecem ativas, com novos campos nulos.
+
+## Administração de usuários
+
+`/usuarios` usa `getManagedUsers` para restringir a consulta ao gestor da unidade. Apenas id, nome, e-mail, perfil e presença de senha são enviados ao cliente; contas, hashes e tokens não são serializados. `src/user-actions.ts` autentica a sessão e reconsulta o gestor dentro da transação, define a unidade de novos registros pelo servidor e limita a edição à unidade atual.
+
+A edição altera nome/perfil, sincroniza o nome da identidade e revoga sessões na mesma transação. E-mail/unidade são imutáveis nesta interface; o próprio gestor não pode se rebaixar. O provisionamento de credenciais permanece administrativo pelo terminal. A desativação está disponível; não há exclusão nesta interface.
+
+### Auditoria de cadastros
+
+`UserAudit` armazena snapshots de autor (id/nome), destinatário (id/e-mail), unidade, ação, data e nome/perfil antes/depois. IDs são referências históricas sem foreign keys para evitar apagamento em cascata ou impedir a retenção de evidências após mudanças externas no diretório. A tabela possui índice por unidade/data; consultas usam a unidade da sessão e retornam no máximo 100 eventos recentes.
+
+Cadastro/edição gravam o evento pelo mesmo cliente transacional. Operações sem mudanças não alteram identidade/sessões e não geram evento. O histórico não contém credenciais. Apenas ações administrativas da interface são cobertas; provisionamento CLI, seed e alterações externas não geram eventos. Não é um mecanismo de proteção contra acesso direto ao arquivo SQLite.
+
+### Situação das contas
+
+`User.isActive` tem padrão true. `getCurrentUser` exige conta ativa na leitura do perfil para sessões reais e demo; a seleção demo também recusa conta desativada. A criação de sessão Better Auth usa um database hook que exige perfil ativo. A referência oficial dos [database hooks](https://better-auth.com/docs/1.6/concepts/database) descreve a interrupção da operação com APIError.
+
+`setManagedUserActive` valida gestor ativo dentro da transação, recusa a própria conta e limita o alvo à unidade da sessão. Uma atualização condicional recusa transições repetidas. Situação, revogação de sessões e evento DEACTIVATE/REACTIVATE são atômicos. Auditoria inclui activeBefore/activeAfter; eventos anteriores mantêm esses campos nulos. Reativação não altera hash de senha e revoga também eventuais sessões remanescentes. Provisionamento CLI não altera isActive.
+
+## Interação anual
+
+YearView recebe TaskWithHistory[], usuário e diretório de funcionários com o mesmo escopo da visão mensal. Agrupa tarefas por data civil e ano, mantém a seleção do dia e o id da tarefa, e deriva o objeto selecionado das props atuais. Renderiza o TaskModal compartilhado para preservar regras e comportamento. A página reinicia a seleção ao mudar de ano por meio da key. A lista de um dia é derivada novamente após revalidação, sem snapshot desatualizado de prazo/título.
+
+## Quadros de prazo interativos
+
+StatusCards recebe tarefas com histórico, usuário e funcionários do mesmo fluxo de consulta da agenda. Agrupa apenas pendências ativas por prazo e mantém somente a faixa expandida e o id selecionado como estado. A tarefa do modal e as listas são derivadas das props atuais, acompanhando revalidações. Usa o TaskModal compartilhado; as ações mantêm as verificações existentes de perfil/unidade no servidor. Os quadros descrevem o período da agenda e não consultam pendências fora dele.
+
+## Lista de tarefas
+
+`/tarefas` normaliza parâmetros com `resolveTaskListParams` e consulta `getTaskListData`. Busca e estado são aplicados no Prisma, sempre com unitId da sessão e archivedAt=null. A opção overdue define status PENDING e dueDate anterior ao início do dia, seguindo a mesma data civil local das regras do calendário. Não há dependência dos parâmetros de mês/ano.
+
+A contagem define a paginação de 25 resultados; páginas fora do intervalo são ajustadas para a última disponível. A ordenação por dueDate/id evita empates instáveis. Histórico e pontos focais acompanham apenas as tarefas da página; o diretório para edição só é carregado para operador/gestor. Anônimos não recebem dados. TaskList mantém o id selecionado e deriva o modal das props atuais. Formulário GET mantém filtros na URL e reinicia a página a cada aplicação. A busca segue as limitações de contains/SQLite para acentos.
+
+## Temas e camada visual
+
+`globals.css` define tokens de fundo, superfície, texto e escala neutra para os dois temas, utilizados pelo Tailwind via `@theme inline`. Superfícies usam bg-surface e ações sólidas preservam text-white. A variante dark segue data-theme no elemento html; cores de estado possuem variantes de fundo/texto adequadas ao tema.
+
+O script inicial em layout escolhe a preferência local ou o sistema antes da hidratação. ThemeSelect usa useSyncExternalStore para sincronizar a preferência entre instâncias/abas e escuta mudanças do sistema. A preferência não é uma configuração de conta. AppHeader mantém navegação e seletor em todas as páginas.
+
+TaskModal usa diálogo nomeado e efeito de ciclo de vida para foco/rolagem. O listener de teclado consulta as ações disponíveis ao tabular e useEffectEvent observa o estado atual de operação ao tratar Escape. As regras de negócio e autorização permanecem nas ações existentes.

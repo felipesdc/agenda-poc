@@ -34,7 +34,7 @@ export default async function Home({
   const { currentUser, tasks, employees: allEmployees } = await getAgendaData(rangeStart, rangeEnd, archived);
   if (!currentUser) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main id="main-content" className="min-h-screen bg-gray-50 px-4 py-6 pb-32 sm:px-8">
         <h1 className="text-2xl font-bold text-gray-900">Agenda da Unidade</h1>
         <p className="mt-4 text-gray-700">Identifique-se para consultar a agenda.</p>
         {isPasswordAuthConfigured() && <Link href="/login" className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-white">Entrar com e-mail e senha</Link>}
@@ -44,33 +44,36 @@ export default async function Home({
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <main id="main-content" className="min-h-screen bg-gray-50 px-4 py-6 pb-32 sm:px-8">
       <div className="max-w-7xl mx-auto">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
             Agenda da Unidade
           </h1>
+          <p className="mt-2 text-sm text-gray-600">Acompanhe prazos, encontre pendências e mantenha os compromissos da unidade em dia.</p>
         </header>
+        {currentUser.role === "ADMIN" && <Link href="/usuarios" className="mb-6 inline-block text-blue-700 dark:text-blue-300 underline">Gerenciar usuários</Link>}
         {!isDemoModeEnabled() && <div className="mb-6 flex items-center justify-between gap-4">
           <p className="text-sm text-gray-700">{currentUser.name} · {currentUser.role}</p>
           <LogoutButton />
         </div>}
+        <Link href="/tarefas" className="mb-4 inline-block text-blue-700 dark:text-blue-300 underline">Lista de tarefas · busca e filtros</Link>
         <ArchiveFilter />
         {archived ? (
           <ArchivedTaskList tasks={tasks} currentUser={currentUser} />
         ) : (
           <>
             <DateFilter />
-            <StatusCards tasks={tasks} />
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-              <div className="xl:col-span-2">
+            <StatusCards tasks={tasks} currentUser={currentUser} employees={allEmployees} />
+            <div className={view === "year" ? "grid grid-cols-1 gap-8" : "grid grid-cols-1 gap-8 xl:grid-cols-3"}>
+              <div className={view === "month" ? "min-w-0 xl:col-span-2" : "min-w-0"}>
                 {view === "month" ? (
                   <DashboardCalendar tasks={tasks} currentDate={referenceDate} currentUser={currentUser} employees={allEmployees} />
                 ) : (
-                  <YearView tasks={tasks} year={year} />
+                  <YearView key={year} tasks={tasks} year={year} currentUser={currentUser} employees={allEmployees} />
                 )}
               </div>
-              {canWriteTasks(currentUser) && <div><TaskForm employees={allEmployees} /></div>}
+              {canWriteTasks(currentUser) && <div className="min-w-0"><TaskForm employees={allEmployees} /></div>}
             </div>
           </>
         )}

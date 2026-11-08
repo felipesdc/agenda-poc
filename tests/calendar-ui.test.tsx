@@ -6,10 +6,11 @@ import ArchiveFilter from "../src/components/ArchiveFilter";
 import ArchivedTaskList from "../src/components/ArchivedTaskList";
 import DateFilter from "../src/components/DateFilter";
 import DashboardCalendar from "../src/components/DashboardCalendar";
+import TaskList from "../src/components/TaskList";
 import StatusCards from "../src/components/StatusCards";
 import YearView from "../src/components/YearView";
 import UserSwitcher from "../src/components/UserSwitcher";
-import { employees, operator, taskFixture } from "./helpers/fixtures";
+import { admin, employees, operator, taskFixture } from "./helpers/fixtures";
 
 const navigation = vi.hoisted(() => ({ query: "month=0&year=2026", push: vi.fn(), switchUser: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -77,7 +78,7 @@ describe("calendário e indicadores", () => {
   });
 
   it("mostra os doze meses do ano", () => {
-    render(<YearView tasks={[taskFixture()]} year={2026} />);
+    render(<YearView tasks={[taskFixture()]} year={2026} currentUser={operator} employees={employees} />);
     const months = screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
     expect(months).toEqual(["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]);
   });
@@ -93,7 +94,7 @@ describe("calendário e indicadores", () => {
       taskFixture({ id: "completed", title: "Concluída", status: "COMPLETED" }),
       taskFixture({ id: "validated", title: "Validada", status: "VALIDATED" }),
     ];
-    render(<StatusCards tasks={tasks} />);
+    render(<StatusCards tasks={tasks} currentUser={operator} employees={employees} />);
     for (const [title, count] of [["Vencidas / Críticas", "1"], ["Atenção (Próx 15 dias)", "2"], ["No Prazo", "1"]]) {
       const cardHeader = screen.getByText(title).parentElement!;
       expect(within(cardHeader).getByText(count)).toBeTruthy();
@@ -103,7 +104,7 @@ describe("calendário e indicadores", () => {
   });
 
   it("mostra contadores zerados sem tarefas", () => {
-    render(<StatusCards tasks={[]} />);
+    render(<StatusCards tasks={[]} currentUser={operator} employees={employees} />);
     expect(screen.getAllByText("0")).toHaveLength(3);
   });
 });
@@ -183,8 +184,190 @@ describe("robustez dos filtros e cores anuais", () => {
   });
   it("visão anual representa concluídas em azul e validadas em cinza com texto acessível", () => {
     const tasks = [taskFixture({ status: "COMPLETED", dueDate: new Date(2026, 10, 5, 12) }), taskFixture({ id: "validated", status: "VALIDATED", dueDate: new Date(2026, 10, 6, 12) })];
-    render(<YearView tasks={tasks} year={2026} />);
+    render(<YearView tasks={tasks} year={2026} currentUser={operator} employees={employees} />);
     expect(screen.getByRole("img", { name: "05/11/2026: Concluída" }).className).toContain("bg-blue-500");
     expect(screen.getByRole("img", { name: "06/11/2026: Validada" }).className).toContain("bg-gray-400");
+  });
+});
+
+
+describe("interação na visão anual", () => {
+  const props = { year: 2026, currentUser: operator, employees };
+  it("lista todas as tarefas do dia e abre detalhes e histórico da tarefa escolhida", async () => {
+    const user = userEvent.setup();
+    render(<YearView {...props} tasks={[taskFixture(), taskFixture({ id: "second", title: "Segunda tarefa" })]} />);
+    await user.click(screen.getByRole("button", { name: "05/11/2026: 2 tarefas" }));
+    const list = within(screen.getByRole("region", { name: "Tarefas de 05/11/2026" }));
+    expect(list.getAllByRole("listitem")).toHaveLength(2);
+    await user.click(list.getByRole("button", { name: /Segunda tarefa/ }));
+    expect(screen.getByRole("heading", { name: "Segunda tarefa" })).toBeTruthy();
+    expect(screen.getByText("Conferir os documentos")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    expect(screen.getByText("Por: Bob Operador")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Fechar tarefa" }));
+    expect(screen.queryByRole("heading", { name: "Segunda tarefa" })).toBeNull();
+    expect(list.getAllByRole("listitem")).toHaveLength(2);
+  });
+  it("edita pelo mesmo formulário e mantém o modal aberto em falha", async () => {
+    const { updateTask } = await import("../src/actions");
+    vi.mocked(updateTask).mockResolvedValueOnce({ success: false, message: "Revise a alteração" }).mockResolvedValueOnce({ success: true, message: "Salvo" });
+    const user = userEvent.setup();
+    render(<YearView {...props} tasks={[taskFixture()]} />);
+    await user.click(screen.getByRole("button", { name: "05/11/2026: 1 tarefa" }));
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.clear(screen.getByLabelText("Título"));
+    await user.type(screen.getByLabelText("Título"), "Remessa anual revisada");
+    await user.selectOptions(screen.getByLabelText("Periodicidade"), "ANNUAL");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Revise a alteração");
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Remessa anual revisada");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
+    const call = vi.mocked(updateTask).mock.calls.at(-1)!;
+    expect(call[0]).toBe("task");
+    expect(call[2].get("title")).toBe("Remessa anual revisada");
+    expect(call[2].get("frequency")).toBe("ANNUAL");
+  });
+  it("visualizador consulta detalhes sem editar ou concluir", async () => {
+    const user = userEvent.setup();
+    render(<YearView {...props} currentUser={{ ...operator, role: "VIEWER" }} tasks={[taskFixture()]} />);
+    await user.click(screen.getByRole("button", { name: "05/11/2026: 1 tarefa" }));
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    expect(screen.getByRole("heading", { name: "Enviar remessa" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirmar Conclusão" })).toBeNull();
+  });
+  it("gestor valida conclusão e fecha detalhes após sucesso", async () => {
+    const { validateTask } = await import("../src/actions");
+    vi.mocked(validateTask).mockResolvedValueOnce({ success: true, message: "Validada" });
+    const user = userEvent.setup();
+    render(<YearView {...props} currentUser={admin} tasks={[taskFixture({ status: "COMPLETED" })]} />);
+    await user.click(screen.getByRole("button", { name: "05/11/2026: 1 tarefa" }));
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    await user.click(screen.getByRole("button", { name: /Validar/ }));
+    expect(validateTask).toHaveBeenCalledWith("task");
+    expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
+  });
+  it("atualiza a lista após revalidação e remove tarefa que mudou de prazo", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<YearView {...props} tasks={[taskFixture()]} />);
+    await user.click(screen.getByRole("button", { name: "05/11/2026: 1 tarefa" }));
+    rerender(<YearView {...props} tasks={[taskFixture({ dueDate: new Date(2026,10,6,12), title: "Prazo alterado" })]} />);
+    expect(screen.getByText("Nenhuma tarefa neste dia.")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "06/11/2026: 1 tarefa" }));
+    expect(screen.getByRole("button", { name: /Prazo alterado/ })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Fechar lista" }));
+    expect(screen.queryByRole("region", { name: "Tarefas de 06/11/2026" })).toBeNull();
+  });
+  it("ignora tarefas de outro ano e oferece link para o mês correto", () => {
+    render(<YearView {...props} tasks={[taskFixture({ dueDate: new Date(2025,10,5,12) })]} />);
+    expect((screen.getByRole("button", { name: "05/11/2026: 0 tarefas" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("link", { name: "Abrir novembro na visão mensal" }).getAttribute("href")).toBe("/?view=month&month=10&year=2026");
+  });
+});
+
+describe("detalhes pelos quadros de prazo", () => {
+  const props = { currentUser: operator, employees };
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026,10,5,12)); });
+  it.each([
+    ["Vencidas / Críticas", new Date(2026,10,4,12)],
+    ["Atenção (Próx 15 dias)", new Date(2026,10,10,12)],
+    ["No Prazo", new Date(2026,10,25,12)],
+  ])("abre detalhes e histórico pelo quadro %s", async (title, dueDate) => {
+    const user = userEvent.setup();
+    render(<StatusCards {...props} tasks={[taskFixture({ dueDate })]} />);
+    const card = screen.getByRole("button", { name: new RegExp(title.replace(/[()]/g, "\\$&")) });
+    await user.click(card);
+    expect(card.getAttribute("aria-expanded")).toBe("true");
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    expect(screen.getByRole("heading", { name: "Enviar remessa" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    expect(screen.getByText("Por: Bob Operador")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Fechar tarefa" }));
+    expect(screen.getByRole("region", { name: `Tarefas: ${title}` })).toBeTruthy();
+  });
+  it("permite editar e fecha o modal após salvar", async () => {
+    const { updateTask } = await import("../src/actions");
+    vi.mocked(updateTask).mockResolvedValueOnce({ success: true, message: "Salvo" });
+    const user = userEvent.setup();
+    render(<StatusCards {...props} tasks={[taskFixture()]} />);
+    await user.click(screen.getByRole("button", { name: /Atenção/ }));
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.clear(screen.getByLabelText("Título"));
+    await user.type(screen.getByLabelText("Título"), "Remessa pelo quadro");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(vi.mocked(updateTask).mock.calls.at(-1)?.[2].get("title")).toBe("Remessa pelo quadro");
+    expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
+  });
+  it("visualizador pode detalhar sem editar", async () => {
+    const user = userEvent.setup();
+    render(<StatusCards {...props} currentUser={{ ...operator, role: "VIEWER" }} tasks={[taskFixture()]} />);
+    await user.click(screen.getByRole("button", { name: /Atenção/ }));
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    expect(screen.getByText("Conferir os documentos")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+  it("lista acompanha revalidação e exclui concluídas, validadas e arquivadas", async () => {
+    const task = taskFixture();
+    const user = userEvent.setup();
+    const { rerender } = render(<StatusCards {...props} tasks={[task, taskFixture({ id: "completed", status: "COMPLETED" }), taskFixture({ id: "validated", status: "VALIDATED" }), taskFixture({ id: "archived", archivedAt: new Date() })]} />);
+    await user.click(screen.getByRole("button", { name: /Atenção/ }));
+    expect(within(screen.getByRole("region", { name: /Tarefas: Atenção/ })).getAllByRole("listitem")).toHaveLength(1);
+    rerender(<StatusCards {...props} tasks={[{ ...task, status: "COMPLETED" }]} />);
+    expect(screen.getByText("Nenhuma tarefa nesta faixa de prazo.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Enviar remessa/ })).toBeNull();
+  });
+  it("permite abrir quadro pelo teclado, alternar faixas e fechar lista", async () => {
+    const user = userEvent.setup();
+    render(<StatusCards {...props} tasks={[]} />);
+    const card = screen.getByRole("button", { name: /No Prazo/ });
+    card.focus(); await user.keyboard("{Enter}");
+    expect(screen.getByRole("region", { name: "Tarefas: No Prazo" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Atenção/ }));
+    expect(screen.queryByRole("region", { name: "Tarefas: No Prazo" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Fechar lista" }));
+    expect(screen.queryByText("Nenhuma tarefa nesta faixa de prazo.")).toBeNull();
+  });
+});
+
+
+describe("resultados da lista de tarefas", () => {
+  it("abre detalhes e histórico de uma tarefa", async () => {
+    const user = userEvent.setup();
+    render(<TaskList tasks={[taskFixture()]} currentUser={operator} employees={employees} />);
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    expect(screen.getByText("Conferir os documentos")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    expect(screen.getByText("Por: Bob Operador")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Fechar tarefa" }));
+    expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
+  });
+  it("edita pelo modal compartilhado", async () => {
+    const { updateTask } = await import("../src/actions");
+    vi.mocked(updateTask).mockResolvedValueOnce({ success: true, message: "Salvo" });
+    const user = userEvent.setup();
+    render(<TaskList tasks={[taskFixture()]} currentUser={operator} employees={employees} />);
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.type(screen.getByLabelText("Título"), " revisada");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(vi.mocked(updateTask).mock.calls.at(-1)?.[2].get("title")).toBe("Enviar remessa revisada");
+    expect(screen.queryByLabelText("Título")).toBeNull();
+  });
+  it("restringe edição para visualizador", async () => {
+    const user = userEvent.setup();
+    render(<TaskList tasks={[taskFixture()]} currentUser={{ ...operator, role: "VIEWER" }} employees={[]} />);
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+  it("mostra resultado vazio e remove detalhes quando a tarefa sai dos resultados", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<TaskList tasks={[taskFixture()]} currentUser={operator} employees={employees} />);
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    rerender(<TaskList tasks={[]} currentUser={operator} employees={employees} />);
+    expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
+    expect(screen.getByText(/Nenhuma tarefa corresponde/)).toBeTruthy();
   });
 });

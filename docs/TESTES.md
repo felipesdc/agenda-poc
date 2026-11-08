@@ -20,6 +20,8 @@ npm run test:watch
 
 | Arquivo | O que verifica |
 | --- | --- |
+| `tests/theme-ui.test.tsx` | Tema do sistema, persistência local, escolha explícita e acompanhamento de mudanças do sistema |
+| `tests/task-list-params.test.ts` | Normalização, limites, estado desconhecido, vencidas, páginas inválidas, parâmetros duplicados e URLs de paginação |
 | `tests/task-input.test.ts` | Frequência padrão, todas as frequências oferecidas, deduplicação de pontos focais, título sem espaços nas extremidades, datas inexistentes, matrícula inválida e arquivos em campos de texto |
 | `tests/archive-input.test.ts` | Motivo obrigatório, limites de tamanho, espaços e tipos inválidos |
 | `tests/calendar-params.test.ts` | Mês zero, ano limitado, parâmetros vazios/malformados/duplicados e fallback seguro |
@@ -29,10 +31,11 @@ npm run test:watch
 | `tests/frequency.test.ts` | Sete recorrências automáticas, NONE/EVENTUAL, final de mês, ano bissexto, passagem de ano e preservação da data original |
 | `tests/task-status.test.ts` | Pendências vencidas, hoje, limites de 15/16 dias, prioridade de concluída/validada, mudança de ano e preservação da data recebida |
 | `tests/task-actions.test.ts` | Cadastro, edição, troca/remoção de pontos focais, histórico, arquivamento e restauração sem perda de histórico, conclusão, validação pelo gestor, geração da sucessora, tarefas inexistentes, sessão ausente/inválida, troca de perfil, permissões, isolamento, transições, validação concorrente e rollback de auditoria |
+| `tests/user-management-ui.test.tsx` | Situação da senha, bloqueio do próprio rebaixamento, preservação após erro, limpeza após sucesso e falha de conexão |
 | `tests/task-ui.test.tsx` | Envio e limpeza do cadastro, preservação dos campos após falha, erros de transporte e negócio, nova tentativa, edição, histórico, confirmação/cancelamento do arquivamento e restauração, bloqueio de ações concorrentes e botões conforme perfil/unidade/estado |
 | `tests/calendar-ui.test.tsx` | Janeiro com month=0, período atual, navegação mensal/anual, passagem de ano, alternância de visão, abertura/fechamento de detalhes, doze meses, indicadores e seletor de demonstração |
 
-Resultado após o incremento 4, em 07/11/2026: **187 testes aprovados em 11 arquivos**, sem casos `todo`.
+Resultado após o incremento 12, em 07/11/2026: **257 testes aprovados em 14 arquivos**, sem casos `todo`.
 
 ## Banco isolado
 
@@ -80,3 +83,31 @@ Os testes de autenticação usam Better Auth e Prisma reais, com um SQLite novo 
 Foram testados também provisionamento por stdin e o fluxo HTTP contra o servidor Next: tela de login, emissão de cookie, acesso autenticado, redirecionamento de usuário já autenticado e logout. Isso complementa JSDOM e handler direto, sem substituir uma revisão em navegador real.
 
 A verificação foi executada com Node 22.23.4. O mínimo do projeto passou a ser Node 20.19 por compatibilidade com as dependências de autenticação.
+
+## Gestão administrativa
+
+A suíte de integração de ações também verifica cadastro de usuário, normalização/duplicação de e-mail, rejeição de campos inválidos, consultas e mutações restritas ao gestor e à sua unidade, impossibilidade de rebaixar a si próprio, sincronização da identidade e revogação de sessões. Uma trigger de falha na exclusão de sessão comprova rollback do nome e do perfil. O banco local não é usado.
+
+## Auditoria administrativa
+
+Testes adicionais verificam autoria e snapshots no cadastro/edição, preservação após alteração do diretório, operação sem mudanças sem revogação, isolamento/permissões de consulta e limite de 100 eventos. Uma trigger recusa INSERT em UserAudit e comprova rollback de cadastro, perfil, identidade e revogação de sessões.
+
+## Contas ativas/desativadas
+
+Integração verifica revogação de sessões, preservação de hash, transições repetidas, restrição de perfil/unidade, autodesativação, bloqueio por cookie demo antigo e rollback com falha na auditoria. O handler real Better Auth é exercitado contra SQLite: conta desativada não cria sessão; reativação aceita novo login; conta desativada não acessa ações mesmo com sessão preexistente. Componentes verificam confirmação/cancelamento, ausência de autodesativação e nova tentativa após falha.
+
+## Visão anual interativa
+
+Os testes do calendário exercitam múltiplas tarefas no dia, abertura/fechamento do modal compartilhado e consulta do histórico. Verificam edição com falha seguida de sucesso preservando os campos, leitura sem edição para visualizador, validação pelo gestor, lista atualizada após mudança de prazo e exclusão de tarefas de outro ano. A navegação para o mês usa o mês/ano do cartão.
+
+## Quadros de prazo
+
+Sete casos novos exercitam abertura de detalhes/histórico em cada faixa, edição pelo modal, consulta por visualizador, atualização da lista após conclusão, exclusão de arquivadas/concluídas/validadas, teclado, alternância e fechamento da lista. Os componentes reais são renderizados no JSDOM com as ações simuladas.
+
+## Lista com busca e filtros
+
+Ações de integração também consultam a lista com SQLite real, verificando todos os períodos, título/descrição, combinação com estado, vencidas antigas sem incluir hoje/finalizadas, exclusão de arquivadas, isolamento de unidade, anônimos, histórico e diretório restrito para visualizador. Paginação usa 26 registros com mesmo prazo para verificar divisão e ordenação estável. A interface exercita detalhes/histórico, edição, leitura pelo visualizador e remoção de detalhes quando a tarefa deixa os resultados.
+
+## Tema e modal acessível
+
+Três testes de tema verificam preferência do sistema, persistência e escolha explícita, além de retorno ao modo Sistema. Dois testes do modal verificam papel/nome de diálogo, Escape, contenção de foco e restauração de foco/rolagem. A verificação visual no Chrome incluiu temas claro e escuro, detalhes e campos de edição; não substitui auditoria completa de acessibilidade ou inspeção em dispositivos móveis.

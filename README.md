@@ -27,8 +27,7 @@ Pré-requisitos: Node.js 20.19 ou superior e npm. Recomendado Node 22, indicado 
 ```bash
 npm ci
 cp .env.example .env
-npx prisma generate
-npx prisma migrate deploy
+npm run db:prepare
 npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
 ```
 
@@ -58,8 +57,7 @@ O seed cria a unidade `U001`, três usuários e três funcionários fictícios. 
 Os incrementos incluem migrações aditivas para recorrência, arquivamento, autenticação e índices. Antes de iniciar a versão atualizada, com a sua configuração `DATABASE_URL` carregada:
 
 ```bash
-npx prisma generate
-npx prisma migrate deploy
+npm run db:prepare
 npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
 ```
 
@@ -78,6 +76,10 @@ Operadores e visualizadores consultam o arquivo da própria unidade; arquivar e 
 | Comando | Finalidade |
 | --- | --- |
 | `npm run dev` | Servidor de desenvolvimento |
+| `npm run db:prepare` | Gera cliente Prisma e aplica migrações pendentes, sem reset ou seed |
+| `npm run db:status` | Confere migrações pendentes |
+| `npm run db:check` | Compara o banco configurado com o schema, falhando se houver diferenças |
+| `npm run typecheck` | Verificação de tipos |
 | `npm run auth:provision -- --email usuario@dominio.com` | Provisionar ou redefinir senha de usuário existente |
 | `npm run lint` | Análise estática com ESLint |
 | `npm test` | Toda a suíte: regras, integração com SQLite e componentes |
@@ -102,3 +104,59 @@ A suíte cobre validação, recorrências, classificação por prazo, CRUD e cic
 - [Registro das verificações](docs/VALIDACAO.md)
 
 Licença: [MIT](LICENSE).
+
+## Integração contínua
+
+O workflow [CI](.github/workflows/ci.yml) executa em pull requests, pushes na `main` e acionamento manual. Usa Node da `.nvmrc`, `npm ci` e SQLite novo no diretório temporário do runner, sem acessar o banco local ou exigir segredos. Verifica aplicação das migrações, equivalência do banco com o schema, schema Prisma, lint, testes, build com Webpack e tipos. O build precisa de rede para baixar fontes do Google.
+
+Antes de iniciar uma versão atualizada localmente, faça backup do banco e execute `npm run db:prepare`. O comando não redefine dados e não executa o seed. Se aparecer `P2022` indicando uma coluna ausente (por exemplo `Task.archivedAt`), pare o servidor, confira `npm run db:status`, prepare o banco e reinicie `npm run dev`. Confirme que o `DATABASE_URL` aponta para o banco esperado.
+
+O workflow passa a executar após ser enviado ao GitHub. Para exigir seu sucesso antes do merge, configure o check **Qualidade e migrações** nas regras da branch. Referência: [GitHub Actions para Node.js](https://docs.github.com/en/actions/tutorials/build-and-test-code/nodejs).
+
+## Gestão de usuários
+
+Entre como gestor e abra **Gerenciar usuários** na agenda (`/usuarios`). A tela lista somente os usuários da sua unidade, permite cadastrar nome/e-mail/perfil e editar nome/perfil. Novos usuários recebem automaticamente a unidade do gestor. E-mails são normalizados e não podem repetir cadastros existentes, inclusive de outra unidade.
+
+E-mail e unidade não são editáveis neste incremento. Não há exclusão de usuários. O gestor não pode rebaixar o próprio perfil; pode ajustar outros gestores da unidade. Alterações sincronizam o nome da identidade de autenticação e revogam as sessões do usuário em uma única transação. No modo demo, a próxima ação usa o perfil atualizado.
+
+O cadastro não cria senha padrão. O responsável pelo ambiente provisiona a senha com `npm run auth:provision -- --email email-do-usuario`, como descrito em [AUTENTICACAO.md](docs/AUTENTICACAO.md). A interface mostra se há senha cadastrada. Não execute novamente o seed para gerir perfis: ele pode restaurar os perfis dos usuários fictícios. Troca de e-mail/unidade fica para um próximo incremento.
+
+### Auditoria administrativa
+
+A tela de usuários mostra os últimos 100 cadastros/alterações da unidade, com autor, horário de Brasília e nome/perfil antes e depois. Apenas gestores consultam esse histórico. A gravação é atômica: falhas no histórico revertem cadastro, edição e revogação de sessões. Salvar sem mudanças não cria evento nem revoga sessões.
+
+Os registros preservam os valores da época e não são apagados por alterações no diretório. Não existe edição/exclusão de histórico na aplicação. A auditoria começa na migração `20261107010000_user_audit`; não reconstrói eventos anteriores. Ela cobre as ações da interface, não alterações diretas no banco, seed ou provisionamento de senhas pelo terminal. Em outras instalações, faça backup e execute `npm run db:prepare` antes de iniciar esta versão.
+
+### Desativar e reativar contas
+
+Em **Gerenciar usuários**, escolha **Desativar conta** e confirme. A ação bloqueia novos logins e o uso de cookies existentes, tanto no login por senha quanto no modo demo. As sessões são revogadas, e tarefas, autoria, senha e histórico permanecem preservados. O gestor só pode agir na própria unidade e não pode desativar a si próprio.
+
+Contas desativadas continuam na lista com a situação visível. **Reativar conta** permite novo login com a senha existente; sessões revogadas não voltam a funcionar. Se ainda não há senha, use o provisionamento administrativo. Redefinir senha pelo terminal não reativa a conta. As duas transições são auditadas e atômicas.
+
+A migração `20261107020000_user_activation` mantém todas as contas existentes ativas. Em outras instalações, faça backup e rode `npm run db:prepare`. Após gerar o novo cliente Prisma, reinicie o servidor de desenvolvimento.
+
+## Visão anual interativa
+
+Na opção **Ano**, cada mês mostra a quantidade de tarefas. Selecione um dia marcado para abrir a lista completa daquele dia e clique no título de uma tarefa para abrir o mesmo modal da visão mensal. Detalhes, pontos focais, histórico, edição, conclusão, validação e arquivamento seguem as mesmas permissões. Visualizadores consultam detalhes e histórico, sem editar.
+
+A lista mantém todas as tarefas do dia acessíveis por rolagem. Dias sem tarefas ficam desabilitados; os botões informam data e quantidade, e a lista mostra a situação por texto além da cor. **Abrir mês** leva ao mês/ano correspondente na visão mensal. Após alterações, a lista acompanha os dados revalidados, inclusive se uma tarefa mudar de prazo. Não há migração de banco para esta melhoria.
+
+## Detalhes pelos quadros de prazo
+
+Clique em **Vencidas / Críticas**, **Atenção (Próx 15 dias)** ou **No Prazo** para abrir as tarefas daquela faixa. A lista considera somente pendências ativas do período consultado, ordenadas pelo prazo. Clique em uma tarefa para abrir detalhes, histórico e ações permitidas ao seu perfil, pelo mesmo modal dos calendários. Os quadros funcionam também por toque e teclado; clique novamente ou use **Fechar lista** para recolher. Não há migração de banco para essa melhoria.
+
+## Lista com busca e filtros
+
+Na agenda, abra **Lista de tarefas · busca e filtros** (`/tarefas`). A lista consulta todos os períodos da unidade, excluindo arquivadas. Digite parte do título ou descrição, escolha o estado e clique em **Aplicar filtros**. **Todas as vencidas** seleciona somente pendências anteriores a hoje, inclusive de meses/anos passados; essa opção tem prioridade sobre o estado escolhido e mantém a busca textual. Tarefas com prazo hoje não são vencidas.
+
+Resultados são ordenados pelo prazo, com 25 tarefas por página. Filtros ficam na URL e são preservados na paginação; aplicar uma nova busca reinicia a página. **Limpar filtros** restaura a consulta geral. Clique em uma tarefa para consultar detalhes, histórico e ações conforme seu perfil. Não há nova migração.
+
+A busca usa `contains` do SQLite: aceita correspondência parcial, mas não remove acentos nem oferece equivalência completa entre maiúsculas/minúsculas em caracteres acentuados. O termo é limitado a 120 caracteres. Esta primeira versão não inclui filtros por ponto focal ou intervalo personalizado de datas.
+
+## Aparência e acessibilidade
+
+O seletor **Tema**, no cabeçalho, oferece **Sistema**, **Claro** e **Escuro**. A preferência fica neste navegador; Sistema acompanha mudanças do sistema operacional. Fundos, textos, campos, bordas e cores de situação foram ajustados para os dois temas. A escolha é aplicada antes da hidratação para reduzir o clarão inicial.
+
+O cabeçalho mantém acesso ao calendário e à lista. A visão anual ocupa a largura disponível; a navegação de período se reorganiza em telas menores. O calendário mensal permite rolagem horizontal em telas estreitas e dias com mais tarefas podem crescer. No celular, o seletor de demonstração deixa de cobrir o conteúdo.
+
+O modal anuncia um diálogo, recebe o foco, mantém Tab dentro dele e devolve o foco ao elemento de origem ao fechar. Escape fecha quando não há uma operação em andamento; a rolagem do fundo fica bloqueada. Há atalho **Pular para o conteúdo**, foco visível e respeito à preferência por movimento reduzido.

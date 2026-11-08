@@ -12,7 +12,7 @@ type TaskFieldsProps = {
   disabled?: boolean;
 };
 
-const inputClass = "w-full p-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 outline-none";
+const inputClass = "w-full p-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-surface focus:ring-2 focus:ring-blue-500 outline-none";
 
 export default function TaskFields({ employees, task, errors, disabled }: TaskFieldsProps) {
   const id = useId();
@@ -27,7 +27,7 @@ export default function TaskFields({ employees, task, errors, disabled }: TaskFi
     "aria-describedby": errors?.[field]?.length ? `${id}-${field}-error` : undefined,
   });
   const error = (field: keyof TaskFieldErrors) => errors?.[field]?.length ? (
-    <p id={`${id}-${field}-error`} className="text-xs text-red-600 mt-1">{errors[field]?.[0]}</p>
+    <p id={`${id}-${field}-error`} className="text-xs text-red-600 dark:text-red-300 mt-1">{errors[field]?.[0]}</p>
   ) : null;
 
   return (
@@ -39,7 +39,7 @@ export default function TaskFields({ employees, task, errors, disabled }: TaskFi
       </div>
       <div>
         <label htmlFor={`${id}-dueDate`} className="block text-sm font-medium text-gray-700 mb-1">Prazo final</label>
-        <input id={`${id}-dueDate`} name="dueDate" type="date" required value={dueDate} onChange={(event) => setDueDate(event.target.value)} className={`${inputClass} [color-scheme:light]`} {...errorProps("dueDate")} />
+        <input id={`${id}-dueDate`} name="dueDate" type="date" required value={dueDate} onChange={(event) => setDueDate(event.target.value)} className={`${inputClass} `} {...errorProps("dueDate")} />
         {error("dueDate")}
       </div>
       <div>
@@ -57,7 +57,7 @@ export default function TaskFields({ employees, task, errors, disabled }: TaskFi
         <legend className="text-sm font-medium text-gray-700 mb-2">Pontos focais</legend>
         <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto p-2 bg-gray-50">
           {employees.length === 0 ? <p className="text-sm text-gray-500">Nenhum funcionário cadastrado.</p> : employees.map((employee) => (
-            <label key={employee.id} className="flex items-center gap-2 p-2 hover:bg-white rounded cursor-pointer">
+            <label key={employee.id} className="flex items-center gap-2 p-2 hover:bg-surface rounded cursor-pointer">
               <input ref={(input) => {
                 // O reset nativo deve preservar também os pontos focais selecionados.
                 if (input) input.defaultChecked = focalPoints.includes(employee.id);

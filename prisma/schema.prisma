@@ -54,6 +54,7 @@ model User {
   name    String
   email   String @unique
   role    Role   @default(OPERATOR)
+  isActive Boolean @default(true)
   unitId  String
   unit    Unit   @relation(fields: [unitId], references: [id])
   tasks   Task[] // Tarefas criadas por este user
@@ -194,4 +195,24 @@ model AuthRateLimit {
   key         String @unique
   count       Int
   lastRequest BigInt
+}
+
+// Snapshots preservam a autoria e os valores mesmo após alterações no diretório.
+model UserAudit {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  unitId      String
+  actorId     String
+  actorName   String
+  userId      String
+  userEmail   String
+  action      String
+  nameBefore  String?
+  roleBefore  String?
+  nameAfter   String
+  roleAfter   String
+  activeBefore Boolean?
+  activeAfter Boolean?
+
+  @@index([unitId, timestamp])
 }

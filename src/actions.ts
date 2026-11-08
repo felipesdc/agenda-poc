@@ -155,7 +155,7 @@ export async function validateTask(taskId: string): Promise<FormState> {
 export async function switchUser(email: string) {
   if (!isDemoModeEnabled()) return;
   const user = await prisma.user.findUnique({ where: { email } });
-  if (user) {
+  if (user?.isActive) {
     const store = await cookies();
     store.set("userId", user.id, { secure: true, httpOnly: true, sameSite: "lax", path: "/", maxAge: 86400 });
     revalidatePath("/");

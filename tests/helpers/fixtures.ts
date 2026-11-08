@@ -5,7 +5,7 @@ export const employees: Employee[] = [
   { id: 1001, name: "Alice Gestora", email: "alice@test.invalid" },
   { id: 1002, name: "Bob Operador", email: "bob@test.invalid" },
 ];
-export const operator: User = { id: "operator", name: "Bob Operador", email: "bob@test.invalid", role: "OPERATOR", unitId: "unit" };
+export const operator: User = { id: "operator", name: "Bob Operador", email: "bob@test.invalid", role: "OPERATOR", unitId: "unit", isActive: true };
 export const admin: User = { ...operator, id: "admin", name: "Alice Gestora", role: "ADMIN" };
 
 export function taskFixture(overrides: Partial<TaskWithHistory> = {}): TaskWithHistory {

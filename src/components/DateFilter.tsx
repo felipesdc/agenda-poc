@@ -45,15 +45,15 @@ export default function DateFilter() {
   const toggleView = (v: string) => updateUrl(currentDate, v);
 
   return (
-    <div className="flex items-center justify-between bg-white p-4 rounded-xl border shadow-sm mb-6">
-      <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center justify-between gap-4 bg-surface p-4 rounded-xl border shadow-sm mb-6">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           <button
             aria-pressed={view === "month"}
             onClick={() => toggleView("month")}
             className={`p-2 rounded-md text-sm font-medium transition-all ${
               view === "month"
-                ? "bg-white shadow text-gray-900"
+                ? "bg-surface shadow text-gray-900"
                 : "text-gray-500 hover:text-gray-900"
             }`}
           >
@@ -65,7 +65,7 @@ export default function DateFilter() {
             onClick={() => toggleView("year")}
             className={`p-2 rounded-md text-sm font-medium transition-all ${
               view === "year"
-                ? "bg-white shadow text-gray-900"
+                ? "bg-surface shadow text-gray-900"
                 : "text-gray-500 hover:text-gray-900"
             }`}
           >
@@ -74,7 +74,7 @@ export default function DateFilter() {
           </button>
         </div>
 
-        <h2 className="text-xl font-bold text-gray-800 capitalize min-w-[200px]">
+        <h2 className="text-xl font-bold text-gray-800 capitalize ">
           {view === "month"
             ? format(currentDate, "MMMM yyyy", { locale: ptBR })
             : format(currentDate, "yyyy")}

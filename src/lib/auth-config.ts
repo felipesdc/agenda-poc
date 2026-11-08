@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 import type { PrismaClient } from "@prisma/client";
 
@@ -9,6 +10,12 @@ export function createPasswordAuth(database: PrismaClient, config: { secret: str
     baseURL: config.baseURL,
     database: prismaAdapter(database, { provider: "sqlite" }),
     emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 12, maxPasswordLength: 128 },
+    databaseHooks: {
+      session: { create: { before: async (session) => {
+        const user = await database.user.findFirst({ where: { id: session.userId, isActive: true }, select: { id: true } });
+        if (!user) throw new APIError("UNAUTHORIZED", { message: "E-mail ou senha inválidos." });
+      } } },
+    },
     user: { modelName: "authUser" },
     account: { modelName: "authAccount" },
     verification: { modelName: "authVerification" },

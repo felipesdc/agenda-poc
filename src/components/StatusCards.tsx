@@ -1,87 +1,58 @@
-import { Task } from "@prisma/client";
+"use client";
+
+import { useId, useState } from "react";
+import { format } from "date-fns";
+import type { Employee, User } from "@prisma/client";
 import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
+import TaskModal, { type TaskWithHistory } from "./TaskModal";
 
-export default function StatusCards({ tasks }: { tasks: Task[] }) {
-  // Pré-processamento: Agrupar tarefas por "Cor/Estado"
-  // Importante: getTaskStatusColor agora não altera a data original, seguro de usar
-  const grouped = {
-    red: tasks.filter((t) => getTaskStatusColor(t.dueDate, t.status) === "red"),
-    yellow: tasks.filter(
-      (t) => getTaskStatusColor(t.dueDate, t.status) === "yellow"
-    ),
-    green: tasks.filter(
-      (t) => getTaskStatusColor(t.dueDate, t.status) === "green"
-    ),
-  };
+const categories = [
+  { color: "red", title: "Vencidas / Críticas" },
+  { color: "yellow", title: "Atenção (Próx 15 dias)" },
+  { color: "green", title: "No Prazo" },
+] as const;
+type Category = typeof categories[number]["color"];
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-      {/* Card Vermelho */}
-      <StatusCard
-        title="Vencidas / Críticas"
-        count={grouped.red.length}
-        tasks={grouped.red} // <--- Esta linha é essencial
-        colorClass={colorMap.red.card}
-        iconColor={colorMap.red.dot}
-      />
+export default function StatusCards({ tasks, currentUser, employees }: {
+  tasks: TaskWithHistory[];
+  currentUser: User | null;
+  employees: Employee[];
+}) {
+  const listId = useId();
+  const [expanded, setExpanded] = useState<Category | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedTask = tasks.find((task) => task.id === selectedId);
+  const grouped: Record<Category, TaskWithHistory[]> = { red: [], yellow: [], green: [] };
+  for (const task of tasks) {
+    if (task.archivedAt !== null) continue;
+    const color = getTaskStatusColor(new Date(task.dueDate), task.status);
+    if (color === "red" || color === "yellow" || color === "green") grouped[color].push(task);
+  }
+  for (const entries of Object.values(grouped)) {
+    entries.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime() || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+  }
+  const category = categories.find((item) => item.color === expanded);
 
-      {/* Card Amarelo */}
-      <StatusCard
-        title="Atenção (Próx 15 dias)"
-        count={grouped.yellow.length}
-        tasks={grouped.yellow} // <--- Esta linha é essencial
-        colorClass={colorMap.yellow.card}
-        iconColor={colorMap.yellow.dot}
-      />
-
-      {/* Card Verde */}
-      <StatusCard
-        title="No Prazo"
-        count={grouped.green.length}
-        tasks={grouped.green} // <--- Esta linha é essencial
-        colorClass={colorMap.green.card}
-        iconColor={colorMap.green.dot}
-      />
-    </div>
-  );
-}
-
-// Subcomponente
-// Adicionei um valor padrão "tasks = []" para evitar crash caso venha undefined
-function StatusCard({ title, count, tasks = [], colorClass, iconColor }: { title: string; count: number; tasks: Task[]; colorClass: string; iconColor: string }) {
-  return (
-    <div
-      className={cn(
-        "relative group p-6 rounded-xl border transition-all hover:shadow-md",
-        colorClass
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium opacity-80">{title}</p>
-          <p className="text-3xl font-bold mt-1">{count}</p>
+  return <div className="mb-8">
+    {selectedTask && <TaskModal key={selectedTask.id} task={selectedTask} isOpen onClose={() => setSelectedId(null)} currentUser={currentUser} employees={employees} />}
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      {categories.map(({ color, title }) => <button key={color} type="button" aria-expanded={expanded === color} aria-controls={expanded === color ? listId : undefined} onClick={() => setExpanded(expanded === color ? null : color)} className={cn("rounded-xl border p-6 text-left transition-all hover:shadow-md focus-visible:outline-2 focus-visible:outline-blue-600", colorMap[color].card)}>
+        <div className="flex items-center justify-between">
+          <div><p className="text-sm font-medium opacity-80">{title}</p><p className="mt-1 text-3xl font-bold">{grouped[color].length}</p></div>
+          <span aria-hidden="true" className={cn("h-3 w-3 rounded-full", colorMap[color].dot)} />
         </div>
-        <div className={cn("w-3 h-3 rounded-full", iconColor)} />
-      </div>
-
-      {/* Lista que aparece no Hover (Dropdown puro CSS) */}
-      {tasks.length > 0 && (
-        <div className="absolute left-0 top-full mt-2 w-full opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
-          <div className="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden max-h-64 overflow-y-auto">
-            {tasks.map((task) => (
-              <div
-                key={task.id}
-                className="p-3 border-b text-sm hover:bg-gray-50 text-gray-700"
-              >
-                <p className="font-semibold truncate">{task.title}</p>
-                <p className="text-xs text-gray-500">
-                  {new Date(task.dueDate).toLocaleDateString("pt-BR")}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        <span className="mt-2 block text-xs">{expanded === color ? "Ocultar tarefas" : "Ver tarefas"}</span>
+      </button>)}
     </div>
-  );
+    {category && <section id={listId} aria-label={`Tarefas: ${category.title}`} className="mt-3 rounded-lg border border-gray-200 bg-surface p-4">
+      <div className="mb-3 flex items-center justify-between gap-3"><h2 className="font-semibold text-gray-900">{category.title} · {grouped[category.color].length}</h2><button type="button" onClick={() => setExpanded(null)} className="text-sm text-blue-700 dark:text-blue-300 underline">Fechar lista</button></div>
+      <p className="mb-3 text-sm text-gray-600">Tarefas pendentes do período exibido na agenda. Selecione uma tarefa para abrir os detalhes.</p>
+      {!grouped[category.color].length && <p className="text-sm text-gray-600">Nenhuma tarefa nesta faixa de prazo.</p>}
+      <ul className="max-h-80 space-y-2 overflow-y-auto">{grouped[category.color].map((task) => <li key={task.id}>
+        <button type="button" onClick={() => setSelectedId(task.id)} className="w-full rounded-md border border-gray-200 p-3 text-left text-gray-900 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-blue-600">
+          <span className="block break-words font-medium">{task.title}</span><span className="mt-1 block text-sm text-gray-600">Prazo: {format(new Date(task.dueDate), "dd/MM/yyyy")}</span>
+        </button>
+      </li>)}</ul>
+    </section>}
+  </div>;
 }

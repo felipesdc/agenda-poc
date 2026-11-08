@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { taskForm } from "./helpers/form-data";
 
 // Só as fronteiras do Next são simuladas. Consultas, relações e auditoria usam SQLite real.
@@ -509,5 +509,278 @@ describe("restauração e consulta do arquivo", () => {
 
   it("não oferece uma Server Action para exclusão definitiva", () => {
     expect(actions).not.toHaveProperty("deleteTask");
+  });
+});
+
+// O mesmo banco temporário exercita a administração com as fronteiras reais de sessão.
+describe("gestão administrativa de usuários", () => {
+  async function management() { return import("../src/user-actions"); }
+  function profile(values: Record<string, string> = {}) {
+    const form = new FormData();
+    for (const [key, value] of Object.entries({ name: "Nova Pessoa", email: "nova@test.invalid", role: "OPERATOR", ...values })) form.set(key, value);
+    return form;
+  }
+  it.each(["operator-test", "viewer-test", ""])('bloqueia cadastro e consulta para %s', async (id) => {
+    context.cookies.set("userId", id);
+    expect((await (await management()).createManagedUser(profile())).success).toBe(false);
+    expect(await (await import("../src/lib/managed-users")).getManagedUsers()).toBeNull();
+    expect((await (await management()).updateManagedUser("admin-test", profile())).success).toBe(false);
+  });
+  it("cadastra com e-mail normalizado e unidade da sessão, ignorando unidade enviada", async () => {
+    context.cookies.set("userId", "admin-test");
+    const result = await (await management()).createManagedUser(profile({ email: "  NOVA@Test.Invalid  ", unitId: "unit-other" }));
+    expect(result.success).toBe(true);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: "nova@test.invalid" } });
+    expect(user).toMatchObject({ unitId: "unit-test", role: "OPERATOR" });
+    expect(await prisma.authUser.findUnique({ where: { id: user.id } })).toBeNull();
+    await prisma.user.delete({ where: { id: user.id } });
+  });
+  it("recusa duplicação inclusive com maiúsculas e cadastro externo", async () => {
+    context.cookies.set("userId", "admin-test");
+    expect((await (await management()).createManagedUser(profile({ email: " OTHER@TEST.INVALID " }))).success).toBe(false);
+  });
+  it("recusa entradas inválidas", async () => {
+    context.cookies.set("userId", "admin-test");
+    for (const fields of [{ name: " " }, { email: "invalido" }, { role: "SUPERADMIN" }] as Record<string, string>[]) {
+      expect((await (await management()).createManagedUser(profile(fields))).success).toBe(false);
+    }
+  });
+  it("isola consulta e edição por unidade e impede autopromoção de operador", async () => {
+    context.cookies.set("userId", "admin-test");
+    const users = await (await import("../src/lib/managed-users")).getManagedUsers();
+    expect(users?.map((user) => user.id)).not.toContain("other-admin");
+    expect(users?.every((user) => !('identity' in user))).toBe(true);
+    expect((await (await management()).updateManagedUser("other-admin", profile())).success).toBe(false);
+    context.cookies.set("userId", "operator-test");
+    expect((await (await management()).updateManagedUser("operator-test", profile({ role: "ADMIN" }))).success).toBe(false);
+  });
+  it("bloqueia remover o próprio perfil de gestor", async () => {
+    context.cookies.set("userId", "admin-test");
+    expect((await (await management()).updateManagedUser("admin-test", profile({ role: "VIEWER" }))).success).toBe(false);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: "admin-test" } })).role).toBe("ADMIN");
+  });
+  it("atualiza perfil e identidade atomicamente e revoga sessões", async () => {
+    context.cookies.set("userId", "admin-test");
+    await prisma.authUser.create({ data: { id: "operator-test", name: "Operador", email: "operator@test.invalid" } });
+    await prisma.authSession.create({ data: { id: "management-session", token: "management-token", userId: "operator-test", expiresAt: new Date(Date.now()+3600000) } });
+    const result = await (await management()).updateManagedUser("operator-test", profile({ name: "Pessoa Editada", role: "VIEWER", email: "forged@test.invalid", unitId: "unit-other" }));
+    expect(result.success).toBe(true);
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: "operator-test" } })).toMatchObject({ name: "Pessoa Editada", role: "VIEWER", email: "operator@test.invalid", unitId: "unit-test" });
+    expect((await prisma.authUser.findUniqueOrThrow({ where: { id: "operator-test" } })).name).toBe("Pessoa Editada");
+    expect(await prisma.authSession.count({ where: { userId: "operator-test" } })).toBe(0);
+    await prisma.authUser.delete({ where: { id: "operator-test" } });
+    await prisma.user.update({ where: { id: "operator-test" }, data: { name: "Operador", role: "OPERATOR" } });
+  });
+});
+
+describe("atomicidade administrativa", () => {
+  it("reverte perfil se a revogação de sessões falhar", async () => {
+    context.cookies.set("userId", "admin-test");
+    await prisma.authUser.create({ data: { id: "operator-test", name: "Operador", email: "operator@test.invalid" } });
+    await prisma.authSession.create({ data: { id: "rollback-management", token: "rollback-management-token", userId: "operator-test", expiresAt: new Date(Date.now()+3600000) } });
+    await prisma.$executeRawUnsafe("CREATE TRIGGER fail_management_session BEFORE DELETE ON AuthSession BEGIN SELECT RAISE(ABORT, 'injected failure'); END");
+    try {
+      const form = new FormData(); form.set("name", "Mudança inválida"); form.set("role", "VIEWER");
+      expect((await (await import("../src/user-actions")).updateManagedUser("operator-test", form)).success).toBe(false);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: "operator-test" } })).role).toBe("OPERATOR");
+      expect((await prisma.authUser.findUniqueOrThrow({ where: { id: "operator-test" } })).name).toBe("Operador");
+      expect(await prisma.authSession.count({ where: { userId: "operator-test" } })).toBe(1);
+    } finally {
+      await prisma.$executeRawUnsafe("DROP TRIGGER fail_management_session");
+      await prisma.authUser.delete({ where: { id: "operator-test" } });
+    }
+  });
+});
+
+describe("auditoria administrativa", () => {
+  function form(name = "Pessoa Auditada", role = "VIEWER") {
+    const data = new FormData(); data.set("name", name); data.set("role", role); data.set("email", "audit@test.invalid"); return data;
+  }
+  beforeEach(async () => {
+    context.cookies.set("userId", "admin-test");
+    await prisma.userAudit.deleteMany();
+  });
+  it("registra cadastro com autoria e snapshots sem credenciais", async () => {
+    const { createManagedUser } = await import("../src/user-actions");
+    expect((await createManagedUser(form())).success).toBe(true);
+    const entry = await prisma.userAudit.findFirstOrThrow();
+    expect(entry).toMatchObject({ action: "CREATE", actorId: "admin-test", actorName: "Gestora", unitId: "unit-test", userEmail: "audit@test.invalid", nameBefore: null, roleBefore: null, nameAfter: "Pessoa Auditada", roleAfter: "VIEWER" });
+    await prisma.user.delete({ where: { id: entry.userId } });
+    expect(await prisma.userAudit.count()).toBe(1);
+  });
+  it("registra antes/depois e preserva autoria após mudar o nome do gestor", async () => {
+    const { updateManagedUser } = await import("../src/user-actions");
+    expect((await updateManagedUser("viewer-test", form())).success).toBe(true);
+    expect(await prisma.userAudit.findFirstOrThrow()).toMatchObject({ action: "UPDATE", nameBefore: "Leitor", nameAfter: "Pessoa Auditada", roleBefore: "VIEWER", roleAfter: "VIEWER" });
+    await prisma.user.update({ where: { id: "admin-test" }, data: { name: "Outro nome" } });
+    expect((await prisma.userAudit.findFirstOrThrow()).actorName).toBe("Gestora");
+    await prisma.user.update({ where: { id: "admin-test" }, data: { name: "Gestora" } });
+    await prisma.user.update({ where: { id: "viewer-test" }, data: { name: "Leitor" } });
+  });
+  it("não registra nem revoga sessões ao salvar sem mudanças", async () => {
+    await prisma.authUser.create({ data: { id: "viewer-test", name: "Leitor", email: "viewer@test.invalid" } });
+    await prisma.authSession.create({ data: { id: "no-change", token: "no-change", userId: "viewer-test", expiresAt: new Date(Date.now()+3600000) } });
+    expect((await (await import("../src/user-actions")).updateManagedUser("viewer-test", form("Leitor"))).success).toBe(true);
+    expect(await prisma.userAudit.count()).toBe(0);
+    expect(await prisma.authSession.count({ where: { userId: "viewer-test" } })).toBe(1);
+    await prisma.authUser.delete({ where: { id: "viewer-test" } });
+  });
+  it("restringe a consulta de histórico ao gestor da própria unidade", async () => {
+    await prisma.userAudit.createMany({ data: ["unit-test", "unit-other"].map((unitId) => ({ unitId, actorId: "admin-test", actorName: "Gestora", userId: "viewer-test", userEmail: "viewer@test.invalid", action: "UPDATE", nameAfter: "Leitor", roleAfter: "VIEWER" })) });
+    const { getUserAudit } = await import("../src/lib/managed-users");
+    expect((await getUserAudit())?.map((entry) => entry.unitId)).toEqual(["unit-test"]);
+    for (const id of ["operator-test", "viewer-test", ""]) {
+      context.cookies.set("userId", id);
+      expect(await getUserAudit()).toBeNull();
+    }
+  });
+  it("limita a consulta aos 100 eventos mais recentes", async () => {
+    await prisma.userAudit.createMany({ data: Array.from({ length: 101 }, (_, i) => ({ unitId: "unit-test", actorId: "admin-test", actorName: "Gestora", userId: "viewer-test", userEmail: "viewer@test.invalid", action: "UPDATE", nameAfter: "Leitor", roleAfter: "VIEWER", timestamp: new Date(2026, 0, 1, 0, i) })) });
+    const entries = await (await import("../src/lib/managed-users")).getUserAudit();
+    expect(entries).toHaveLength(100);
+    expect(entries?.[0].timestamp).toEqual(new Date(2026, 0, 1, 0, 100));
+  });
+  it("falha na auditoria reverte cadastro, perfil e revogação de sessões", async () => {
+    await prisma.authUser.create({ data: { id: "viewer-test", name: "Leitor", email: "viewer@test.invalid" } });
+    await prisma.authSession.create({ data: { id: "audit-rollback", token: "audit-rollback", userId: "viewer-test", expiresAt: new Date(Date.now()+3600000) } });
+    await prisma.$executeRawUnsafe("CREATE TRIGGER fail_user_audit BEFORE INSERT ON UserAudit BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END");
+    try {
+      const actions = await import("../src/user-actions");
+      expect((await actions.createManagedUser(form())).success).toBe(false);
+      expect(await prisma.user.count({ where: { email: "audit@test.invalid" } })).toBe(0);
+      expect((await actions.updateManagedUser("viewer-test", form("Pessoa Auditada", "OPERATOR"))).success).toBe(false);
+      expect(await prisma.user.findUniqueOrThrow({ where: { id: "viewer-test" } })).toMatchObject({ name: "Leitor", role: "VIEWER" });
+      expect((await prisma.authUser.findUniqueOrThrow({ where: { id: "viewer-test" } })).name).toBe("Leitor");
+      expect(await prisma.authSession.count({ where: { userId: "viewer-test" } })).toBe(1);
+      expect(await prisma.userAudit.count()).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe("DROP TRIGGER fail_user_audit");
+      await prisma.authUser.delete({ where: { id: "viewer-test" } });
+    }
+  });
+});
+
+describe("ativação de contas", () => {
+  beforeEach(async () => {
+    context.cookies.set("userId", "admin-test");
+    await prisma.user.updateMany({ data: { isActive: true } });
+    await prisma.userAudit.deleteMany();
+  });
+  afterEach(async () => { await prisma.user.updateMany({ data: { isActive: true } }); });
+  it("desativa, revoga sessões e reativa preservando senha e histórico", async () => {
+    const { provisionPassword } = await import("../src/lib/provision-user");
+    await provisionPassword(prisma, "viewer@test.invalid", "Senha-teste-ativacao-2026!");
+    const account = await prisma.authAccount.findFirstOrThrow({ where: { userId: "viewer-test" } });
+    await prisma.authSession.create({ data: { id: "activation-session", token: "activation-session", userId: "viewer-test", expiresAt: new Date(Date.now()+3600000) } });
+    const { setManagedUserActive } = await import("../src/user-actions");
+    expect((await setManagedUserActive("viewer-test", false)).success).toBe(true);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: "viewer-test" } })).isActive).toBe(false);
+    expect(await prisma.authSession.count({ where: { userId: "viewer-test" } })).toBe(0);
+    expect(await prisma.userAudit.findFirstOrThrow()).toMatchObject({ action: "DEACTIVATE", actorId: "admin-test", activeBefore: true, activeAfter: false });
+    expect((await setManagedUserActive("viewer-test", false)).success).toBe(false);
+    expect((await setManagedUserActive("viewer-test", true)).success).toBe(true);
+    expect(await prisma.userAudit.count()).toBe(2);
+    expect(await prisma.authSession.count({ where: { userId: "viewer-test" } })).toBe(0);
+    expect((await prisma.authAccount.findFirstOrThrow({ where: { userId: "viewer-test" } })).password).toBe(account.password);
+    await prisma.authUser.delete({ where: { id: "viewer-test" } });
+  });
+  it.each(["operator-test", "viewer-test", ""])('recusa alteração por %s', async (id) => {
+    context.cookies.set("userId", id);
+    expect((await (await import("../src/user-actions")).setManagedUserActive("other-admin", false)).success).toBe(false);
+    expect(await prisma.userAudit.count()).toBe(0);
+  });
+  it("impede desativar a si próprio e atingir outra unidade", async () => {
+    const { setManagedUserActive } = await import("../src/user-actions");
+    for (const id of ["admin-test", "other-admin", "missing"]) expect((await setManagedUserActive(id, false)).success).toBe(false);
+    expect(await prisma.userAudit.count()).toBe(0);
+  });
+  it("cookie demo antigo não dá acesso nem permite mutações", async () => {
+    await prisma.user.update({ where: { id: "operator-test" }, data: { isActive: false } });
+    context.cookies.set("userId", "operator-test");
+    expect(await getCurrentUser()).toBeNull();
+    expect((await actions.createTask(previous, taskForm())).success).toBe(false);
+    const { getAgendaData } = await import("../src/lib/tasks");
+    expect((await getAgendaData(new Date(2026,0,1), new Date(2027,0,1))).tasks).toEqual([]);
+    context.cookies.clear();
+    await actions.switchUser("operator@test.invalid");
+    expect(context.cookies.get("userId")).toBeUndefined();
+  });
+  it("conta de gestor desativada perde acesso administrativo", async () => {
+    await prisma.user.update({ where: { id: "admin-test" }, data: { isActive: false } });
+    const { getManagedUsers, getUserAudit } = await import("../src/lib/managed-users");
+    expect(await getManagedUsers()).toBeNull(); expect(await getUserAudit()).toBeNull();
+    expect((await (await import("../src/user-actions")).setManagedUserActive("viewer-test", false)).success).toBe(false);
+  });
+  it("falha na auditoria reverte desativação e revogação", async () => {
+    await prisma.authUser.create({ data: { id: "viewer-test", name: "Leitor", email: "viewer@test.invalid" } });
+    await prisma.authSession.create({ data: { id: "activation-rollback", token: "activation-rollback", userId: "viewer-test", expiresAt: new Date(Date.now()+3600000) } });
+    await prisma.$executeRawUnsafe("CREATE TRIGGER fail_activation_audit BEFORE INSERT ON UserAudit BEGIN SELECT RAISE(ABORT, 'injected failure'); END");
+    try {
+      expect((await (await import("../src/user-actions")).setManagedUserActive("viewer-test", false)).success).toBe(false);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: "viewer-test" } })).isActive).toBe(true);
+      expect(await prisma.authSession.count({ where: { userId: "viewer-test" } })).toBe(1);
+      expect(await prisma.userAudit.count()).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe("DROP TRIGGER fail_activation_audit");
+      await prisma.authUser.delete({ where: { id: "viewer-test" } });
+    }
+  });
+});
+
+describe("consulta da lista de tarefas", () => {
+  async function list(params: Record<string, string> = {}) {
+    const { resolveTaskListParams } = await import("../src/lib/task-list-params");
+    return (await import("../src/lib/task-list")).getTaskListData(resolveTaskListParams(params));
+  }
+  async function seedList() {
+    const today = new Date(); today.setHours(12,0,0,0);
+    await prisma.task.createMany({ data: [
+      { id: "list-old", title: "Remessa antiga", description: "Documentos fiscais", dueDate: new Date(2020,0,1,12), createdById: "operator-test", unitId: "unit-test" },
+      { id: "list-today", title: "Hoje", dueDate: today, createdById: "operator-test", unitId: "unit-test" },
+      { id: "list-completed", title: "Remessa concluída", status: "COMPLETED", dueDate: new Date(2020,0,2,12), createdById: "operator-test", unitId: "unit-test" },
+      { id: "list-validated", title: "Validada", status: "VALIDATED", dueDate: today, createdById: "operator-test", unitId: "unit-test" },
+      { id: "list-archived", title: "Remessa arquivada", archivedAt: today, dueDate: new Date(2020,0,1,12), createdById: "operator-test", unitId: "unit-test" },
+      { id: "list-other", title: "Remessa externa", dueDate: new Date(2020,0,1,12), createdById: "other-admin", unitId: "unit-other" },
+    ] });
+  }
+  it("consulta todos os períodos sem arquivadas ou dados de outra unidade", async () => {
+    await seedList();
+    const result = await list();
+    expect(result.total).toBe(4);
+    expect(result.tasks.map((task) => task.id)).not.toContain("list-other");
+    expect(result.tasks.map((task) => task.id)).not.toContain("list-archived");
+    expect(result.employees).toHaveLength(2);
+  });
+  it("busca título/descrição e combina com estado", async () => {
+    await seedList();
+    expect((await list({ q: "REMESSA", status: "COMPLETED" })).tasks.map((task) => task.id)).toEqual(["list-completed"]);
+    expect((await list({ q: "fiscais" })).tasks.map((task) => task.id)).toEqual(["list-old"]);
+    expect((await list({ q: "inexistente" })).total).toBe(0);
+    expect((await list({ status: "VALIDATED" })).tasks.map((task) => task.id)).toEqual(["list-validated"]);
+  });
+  it("todas as vencidas inclui meses antigos e exclui hoje e tarefas finalizadas", async () => {
+    await seedList();
+    expect((await list({ overdue: "true", status: "COMPLETED" })).tasks.map((task) => task.id)).toEqual(["list-old"]);
+    expect((await list({ overdue: "true", q: "Hoje" })).total).toBe(0);
+  });
+  it("visualizador consulta com histórico sem receber diretório para edição", async () => {
+    await create();
+    context.cookies.set("userId", "viewer-test");
+    const result = await list();
+    expect(result.tasks).toHaveLength(1);
+    expect(result.tasks[0].history).toHaveLength(1);
+    expect(result.tasks[0].focalPoints).toBeDefined();
+    expect(result.employees).toEqual([]);
+  });
+  it("anônimo não recebe tarefas nem funcionários", async () => {
+    await seedList(); context.cookies.clear();
+    expect(await list()).toMatchObject({ currentUser: null, tasks: [], employees: [], total: 0 });
+  });
+  it("pagina com ordem estável e ajusta página fora do intervalo", async () => {
+    await prisma.task.createMany({ data: Array.from({ length: 26 }, (_, i) => ({ id: `paged-${String(i).padStart(2,"0")}`, title: "Mesmo prazo", dueDate: new Date(2026,0,1,12), unitId: "unit-test", createdById: "operator-test" })) });
+    const first = await list(); const second = await list({ page: "2" });
+    expect(first.tasks).toHaveLength(25); expect(first.pages).toBe(2);
+    expect(second.tasks.map((task) => task.id)).toEqual(["paged-25"]);
+    expect((await list({ page: "999" })).page).toBe(2);
   });
 });
