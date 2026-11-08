@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, useRef, useEffect } from "react";
 import type { Employee, Task } from "@prisma/client";
 import { frequencyLabels } from "@/lib/task-frequency";
 import type { TaskFieldErrors } from "@/lib/task-input";
@@ -16,6 +16,12 @@ const inputClass = "w-full p-2 border border-gray-300 rounded-md text-sm text-gr
 
 export default function TaskFields({ employees, task, errors, disabled }: TaskFieldsProps) {
   const id = useId();
+  const fieldsRef = useRef<HTMLFieldSetElement>(null);
+  useEffect(() => {
+    if (errors && Object.values(errors).some((messages) => messages?.length)) {
+      fieldsRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    }
+  }, [errors]);
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [dueDate, setDueDate] = useState(task ? new Date(task.dueDate).toISOString().slice(0, 10) : "");
@@ -31,7 +37,7 @@ export default function TaskFields({ employees, task, errors, disabled }: TaskFi
   ) : null;
 
   return (
-    <fieldset disabled={disabled} className="space-y-4 disabled:opacity-60">
+    <fieldset ref={fieldsRef} disabled={disabled} className="space-y-4 disabled:opacity-60">
       <div>
         <label htmlFor={`${id}-title`} className="block text-sm font-medium text-gray-700 mb-1">Título</label>
         <input id={`${id}-title`} name="title" required minLength={3} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex: Enviar remessa..." className={inputClass} {...errorProps("title")} />
@@ -53,15 +59,15 @@ export default function TaskFields({ employees, task, errors, disabled }: TaskFi
         </select>
         {error("frequency")}
       </div>
-      <fieldset {...errorProps("focalPoints")}>
+      <fieldset tabIndex={-1} {...errorProps("focalPoints")}>
         <legend className="text-sm font-medium text-gray-700 mb-2">Pontos focais</legend>
         <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto p-2 bg-gray-50">
           {employees.length === 0 ? <p className="text-sm text-gray-500">Nenhum funcionário cadastrado.</p> : employees.map((employee) => (
-            <label key={employee.id} className="flex items-center gap-2 p-2 hover:bg-surface rounded cursor-pointer">
+            <label key={employee.id} className="flex min-h-11 items-center gap-2 p-2 hover:bg-surface rounded cursor-pointer">
               <input ref={(input) => {
                 // O reset nativo deve preservar também os pontos focais selecionados.
                 if (input) input.defaultChecked = focalPoints.includes(employee.id);
-              }} type="checkbox" name="focalPoints" value={employee.id} checked={focalPoints.includes(employee.id)} onChange={(event) => setFocalPoints((ids) => event.target.checked ? [...ids, employee.id] : ids.filter((value) => value !== employee.id))} className="w-4 h-4 rounded border-gray-300" />
+              }} type="checkbox" name="focalPoints" value={employee.id} checked={focalPoints.includes(employee.id)} onChange={(event) => setFocalPoints((ids) => event.target.checked ? [...ids, employee.id] : ids.filter((value) => value !== employee.id))} className="w-5 h-5 rounded border-gray-300" />
               <span className="text-sm text-gray-700">{employee.name}</span>
             </label>
           ))}

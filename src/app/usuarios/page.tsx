@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
   const users = await getManagedUsers();
-  if (!users) return <main id="main-content" className="mx-auto max-w-4xl p-8"><h1 className="text-2xl font-bold">Acesso restrito</h1><p className="my-4">A gestão de usuários é exclusiva do gestor da unidade.</p><Link href="/" className="text-blue-700 dark:text-blue-300 underline">Voltar à agenda</Link></main>;
+  if (!users) return <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl p-8"><h1 className="text-2xl font-bold">Acesso restrito</h1><p className="my-4">A gestão de usuários é exclusiva do gestor da unidade.</p><Link href="/" className="text-blue-700 dark:text-blue-300 underline">Voltar à agenda</Link></main>;
   const actor = await getCurrentUser();
-  if (!actor || actor.role !== "ADMIN") return <main id="main-content" className="p-8">Acesso restrito.</main>;
+  if (!actor || actor.role !== "ADMIN") return <main id="main-content" tabIndex={-1} className="p-8">Acesso restrito.</main>;
   const history = await getUserAudit();
-  return <main id="main-content" className="mx-auto max-w-5xl space-y-6 p-8 text-gray-900">
+  return <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl space-y-6 p-8 text-gray-900">
     <Link href="/" className="text-blue-700 dark:text-blue-300 underline">Voltar à agenda</Link>
     <h1 className="text-2xl font-bold">Usuários da unidade</h1>
     <p>Cadastre usuários e ajuste seus perfis nesta unidade. O e-mail e a unidade permanecem vinculados ao cadastro original.</p>

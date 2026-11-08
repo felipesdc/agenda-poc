@@ -74,6 +74,8 @@ export default function TaskModal({
   const isValidating = pendingAction === "validate";
   const dialogRef = useRef<HTMLDivElement>(null);
   const dialogTitleId = useId();
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
   const closeFromKeyboard = useEffectEvent(() => { if (!isBusy) onClose(); });
   useEffect(() => {
     if (!isOpen) return;
@@ -84,7 +86,7 @@ export default function TaskModal({
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); closeFromKeyboard(); }
       if (event.key !== "Tab") return;
-      const elements = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') || []);
+      const elements = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') || []).filter((element) => element.tabIndex >= 0 && !element.closest("[hidden]"));
       const first = elements[0]; const last = elements.at(-1);
       if (!first) { event.preventDefault(); dialogRef.current?.focus(); return; }
       if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last?.focus(); }
@@ -93,6 +95,16 @@ export default function TaskModal({
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("keydown", keydown); document.body.style.overflow = previousOverflow; if (previousFocus?.isConnected) previousFocus.focus(); };
   }, [isOpen]);
+
+  function selectTab(tab: "details" | "history") {
+    setActiveTab(tab);
+    document.getElementById(`${dialogTitleId}-${tab}-tab`)?.focus();
+  }
+  useEffect(() => {
+    if (isEditing) dialogRef.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
+    else if (!isEditing && wasEditing.current) editButtonRef.current?.focus();
+    wasEditing.current = isEditing;
+  }, [isEditing]);
 
   const runAction = async (action: "archive" | "restore" | "complete" | "validate") => {
     if (actionInFlight.current || isPending) return;
@@ -136,7 +148,7 @@ export default function TaskModal({
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 id={dialogTitleId} className="text-lg font-bold text-gray-900">Tarefa</h3>
-              <span className="text-xs font-medium uppercase opacity-60 tracking-wider">
+              <span className="text-xs font-medium uppercase opacity-90 tracking-wider">
                 {{ PENDING: "Pendente", COMPLETED: "Concluída", VALIDATED: "Validada" }[task.status]}
               </span>
             </div>
@@ -144,18 +156,23 @@ export default function TaskModal({
               onClick={onClose}
               disabled={isBusy}
               aria-label="Fechar tarefa"
-              className="p-1 hover:bg-black/10 rounded-full transition-colors"
+              className="min-h-11 min-w-11 flex items-center justify-center hover:bg-black/10 rounded-full transition-colors"
             >
               <X className="w-5 h-5 text-gray-700" />
             </button>
           </div>
 
           {/* Navegação de Abas */}
-          <div className="flex gap-4">
+          <div role="tablist" aria-label="Informações da tarefa" className="flex gap-4" onKeyDown={(event) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || isBusy) return;
+            event.preventDefault();
+            selectTab(event.key === "Home" ? "details" : event.key === "End" ? "history" : activeTab === "details" ? "history" : "details");
+          }}>
             <button
-              onClick={() => setActiveTab("details")}
+              id={`${dialogTitleId}-details-tab`} role="tab" aria-selected={activeTab === "details"} aria-controls={`${dialogTitleId}-details-panel`} tabIndex={activeTab === "details" ? 0 : -1} disabled={isBusy}
+              onClick={() => selectTab("details")}
               className={cn(
-                "pb-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
+                "min-h-11 pb-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
                 activeTab === "details"
                   ? "border-gray-800 text-gray-900"
                   : "border-transparent text-gray-500 hover:text-gray-700"
@@ -164,9 +181,10 @@ export default function TaskModal({
               <FileText className="w-4 h-4" /> Detalhes
             </button>
             <button
-              onClick={() => setActiveTab("history")}
+              id={`${dialogTitleId}-history-tab`} role="tab" aria-selected={activeTab === "history"} aria-controls={`${dialogTitleId}-history-panel`} tabIndex={activeTab === "history" ? 0 : -1} disabled={isBusy}
+              onClick={() => selectTab("history")}
               className={cn(
-                "pb-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
+                "min-h-11 pb-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
                 activeTab === "history"
                   ? "border-gray-800 text-gray-900"
                   : "border-transparent text-gray-500 hover:text-gray-700"
@@ -179,7 +197,7 @@ export default function TaskModal({
 
         <div className="p-6 overflow-y-auto" aria-busy={isBusy}>
           {actionError && <p role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm rounded">{actionError}</p>}
-          {activeTab === "details" ? (
+          <div role="tabpanel" tabIndex={0} id={`${dialogTitleId}-details-panel`} aria-labelledby={`${dialogTitleId}-details-tab`} hidden={activeTab !== "details"}>{(
             /* --- CONTEÚDO DA ABA DETALHES --- */
             !isEditing ? (
               // MODO LEITURA
@@ -311,7 +329,7 @@ export default function TaskModal({
                 <div className="flex gap-3 pt-4 border-t mt-4">
                   {canEditTask(currentUser, task) && <button
                     disabled={isBusy}
-                    onClick={() => setIsEditing(true)}
+                    ref={editButtonRef} onClick={() => setIsEditing(true)}
                     className="flex-1 flex items-center justify-center gap-2 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 py-2 rounded-lg font-medium transition-colors"
                   >
                     <Edit2 className="w-4 h-4" /> Editar
@@ -364,8 +382,9 @@ export default function TaskModal({
                 </div>
               </form>
             )
-          ) : (
-            /* --- CONTEÚDO DA ABA HISTÓRICO (TIMELINE) --- */
+          )}</div>
+          <div role="tabpanel" tabIndex={0} id={`${dialogTitleId}-history-panel`} aria-labelledby={`${dialogTitleId}-history-tab`} hidden={activeTab !== "history"}>
+            {/* --- CONTEÚDO DA ABA HISTÓRICO (TIMELINE) --- */}
             <div className="space-y-6 pl-2">
               {task.history.length === 0 ? (
                 <p className="text-center text-gray-400 text-sm py-8">
@@ -412,7 +431,7 @@ export default function TaskModal({
                 ))
               )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

@@ -36,3 +36,12 @@ describe("preferência de tema", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 });
+
+it("mantém seleção temporária quando o armazenamento está bloqueado", async () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+  const user = userEvent.setup(); render(<ThemeSelect />);
+  await user.selectOptions(screen.getByLabelText("Tema"), "dark");
+  expect((screen.getByLabelText("Tema") as HTMLSelectElement).value).toBe("dark");
+  systemDark = false; mediaChange?.();
+  expect(document.documentElement.dataset.theme).toBe("dark");
+});

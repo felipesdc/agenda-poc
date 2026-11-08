@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 export default async function TaskListPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const filters = resolveTaskListParams(await searchParams);
   const data = await getTaskListData(filters);
-  if (!data.currentUser) return <main id="main-content" className="p-8"><h1 className="text-2xl font-bold">Lista de tarefas</h1><p className="my-4">Identifique-se na agenda para consultar as tarefas.</p><Link href="/" className="text-blue-700 dark:text-blue-300 underline">Voltar à agenda</Link></main>;
-  return <main id="main-content" className="mx-auto max-w-6xl space-y-6 p-4 text-gray-900 sm:p-8">
+  if (!data.currentUser) return <main id="main-content" tabIndex={-1} className="p-8"><h1 className="text-2xl font-bold">Lista de tarefas</h1><p className="my-4">Identifique-se na agenda para consultar as tarefas.</p><Link href="/" className="text-blue-700 dark:text-blue-300 underline">Voltar à agenda</Link></main>;
+  return <main id="main-content" tabIndex={-1} className="mx-auto max-w-6xl space-y-6 p-4 text-gray-900 sm:p-8">
     <Link href="/" className="text-blue-700 dark:text-blue-300 underline">Voltar à agenda</Link>
     <h1 className="text-2xl font-bold">Lista de tarefas</h1>
     <p>Consulte tarefas ativas da sua unidade em todos os períodos. Abra uma tarefa para ver detalhes e ações disponíveis.</p>

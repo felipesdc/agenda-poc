@@ -151,7 +151,7 @@ describe("consulta das tarefas arquivadas", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Ver detalhes de Enviar remessa" }));
     expect(screen.getByText("Tarefa arquivada")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    await user.click(screen.getByRole("tab", { name: "Histórico" }));
     expect(screen.getByText("Tarefa Criada")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restaurar tarefa" })).toBeNull();
   });
@@ -202,7 +202,7 @@ describe("interação na visão anual", () => {
     await user.click(list.getByRole("button", { name: /Segunda tarefa/ }));
     expect(screen.getByRole("heading", { name: "Segunda tarefa" })).toBeTruthy();
     expect(screen.getByText("Conferir os documentos")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    await user.click(screen.getByRole("tab", { name: "Histórico" }));
     expect(screen.getByText("Por: Bob Operador")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Fechar tarefa" }));
     expect(screen.queryByRole("heading", { name: "Segunda tarefa" })).toBeNull();
@@ -282,7 +282,7 @@ describe("detalhes pelos quadros de prazo", () => {
     expect(card.getAttribute("aria-expanded")).toBe("true");
     await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
     expect(screen.getByRole("heading", { name: "Enviar remessa" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    await user.click(screen.getByRole("tab", { name: "Histórico" }));
     expect(screen.getByText("Por: Bob Operador")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Fechar tarefa" }));
     expect(screen.getByRole("region", { name: `Tarefas: ${title}` })).toBeTruthy();
@@ -339,7 +339,7 @@ describe("resultados da lista de tarefas", () => {
     render(<TaskList tasks={[taskFixture()]} currentUser={operator} employees={employees} />);
     await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
     expect(screen.getByText("Conferir os documentos")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    await user.click(screen.getByRole("tab", { name: "Histórico" }));
     expect(screen.getByText("Por: Bob Operador")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Fechar tarefa" }));
     expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
@@ -369,5 +369,23 @@ describe("resultados da lista de tarefas", () => {
     rerender(<TaskList tasks={[]} currentUser={operator} employees={employees} />);
     expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
     expect(screen.getByText(/Nenhuma tarefa corresponde/)).toBeTruthy();
+  });
+});
+
+describe("orientação temporal", () => {
+  it.each(["month", "year"])("Hoje retorna ao período atual na visão %s", async (view) => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026,10,7,12));
+    navigation.query = `view=${view}&month=0&year=2020&filter=mine`;
+    render(<DateFilter />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Hoje" }));
+    expectPushedQuery(`/?view=${view}&month=10&year=2026&filter=mine`);
+  });
+  it("identifica a data atual nos calendários mensal e anual", () => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026,10,7,12));
+    const { container, unmount } = render(<DashboardCalendar tasks={[]} currentDate={new Date(2026,10,1)} currentUser={operator} employees={employees} />);
+    expect(container.querySelector('[aria-current="date"]')?.textContent).toBe("7");
+    unmount();
+    const yearly = render(<YearView tasks={[]} year={2026} currentUser={operator} employees={employees} />);
+    expect(yearly.container.querySelectorAll('[aria-current="date"]')).toHaveLength(1);
   });
 });

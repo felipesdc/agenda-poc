@@ -74,7 +74,7 @@ export default function DateFilter() {
           </button>
         </div>
 
-        <h2 className="text-xl font-bold text-gray-800 capitalize ">
+        <h2 aria-live="polite" aria-atomic="true" className="text-xl font-bold text-gray-800 capitalize">
           {view === "month"
             ? format(currentDate, "MMMM yyyy", { locale: ptBR })
             : format(currentDate, "yyyy")}
@@ -82,11 +82,12 @@ export default function DateFilter() {
       </div>
 
       <div className="flex gap-2">
+        <button type="button" onClick={() => updateUrl(new Date(), view)} className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-700 hover:bg-gray-100">Hoje</button>
         <button
           aria-label={view === "month" ? "Mês anterior" : "Ano anterior"}
           disabled={atStart}
           onClick={handlePrev}
-          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors"
+          className="min-h-11 min-w-11 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -95,7 +96,7 @@ export default function DateFilter() {
           aria-label={view === "month" ? "Próximo mês" : "Próximo ano"}
           disabled={atEnd}
           onClick={handleNext}
-          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors"
+          className="min-h-11 min-w-11 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full border border-gray-200 transition-colors"
         >
           <ChevronRight className="w-5 h-5" />
         </button>

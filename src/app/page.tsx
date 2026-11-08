@@ -34,7 +34,7 @@ export default async function Home({
   const { currentUser, tasks, employees: allEmployees } = await getAgendaData(rangeStart, rangeEnd, archived);
   if (!currentUser) {
     return (
-      <main id="main-content" className="min-h-screen bg-gray-50 px-4 py-6 pb-32 sm:px-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-50 px-4 py-6 pb-32 sm:px-8">
         <h1 className="text-2xl font-bold text-gray-900">Agenda da Unidade</h1>
         <p className="mt-4 text-gray-700">Identifique-se para consultar a agenda.</p>
         {isPasswordAuthConfigured() && <Link href="/login" className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-white">Entrar com e-mail e senha</Link>}
@@ -44,7 +44,7 @@ export default async function Home({
   }
 
   return (
-    <main id="main-content" className="min-h-screen bg-gray-50 px-4 py-6 pb-32 sm:px-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-50 px-4 py-6 pb-32 sm:px-8">
       <div className="max-w-7xl mx-auto">
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">

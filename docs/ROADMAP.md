@@ -114,6 +114,15 @@ Próximos passos: revisão de dependências e preparação operacional do piloto
 - Modal com foco inicial/restauração, contenção de Tab, Escape e bloqueio da rolagem de fundo.
 - Verificação visual no Chrome nativo dos temas claro/escuro, detalhes e edição, sem salvar alterações.
 
+## Incremento 13 entregue — teclado, orientação e formulários
+
+- Abas semânticas com navegação por setas/Home/End e painéis associados.
+- Rascunho preservado entre abas; foco inicial na edição, retorno ao cancelar e foco em campos inválidos.
+- Contenção de foco ignora painéis ocultos e controles fora da ordem de tabulação.
+- Hoje preserva visão/filtros, data atual marcada e período anunciado.
+- Controles de formulário maiores e tema temporário quando armazenamento está bloqueado.
+- Verificação por teclado no Chrome e testes automatizados dos novos comportamentos.
+
 ## Etapa 1 — Escopo original e pendências
 
 | Item | Evidência atual | Critério de aceite |

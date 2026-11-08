@@ -89,7 +89,7 @@ export default function DashboardCalendar({
                   colorClass && "border-transparent"
                 )}
               >
-                <span className="font-semibold text-xs mb-1">
+                <span aria-current={isSameDay(day, new Date()) ? "date" : undefined} className={cn("mb-1 flex h-6 min-w-6 items-center justify-center rounded-full text-xs font-semibold", isSameDay(day, new Date()) && "bg-blue-600 text-white ring-2 ring-blue-300")}>
                   {format(day, "d")}
                 </span>
 

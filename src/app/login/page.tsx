@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   if (await getCurrentUser()) redirect("/");
   return (
-    <main id="main-content" className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
+    <main id="main-content" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
       <section className="w-full max-w-sm rounded-xl border bg-surface p-6 shadow-sm">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">Entrar na agenda</h1>
         <p className="mb-6 text-sm text-gray-600">Use o acesso fornecido pelo administrador.</p>

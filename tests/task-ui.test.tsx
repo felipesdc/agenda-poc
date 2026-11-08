@@ -110,7 +110,7 @@ describe("detalhes, edição e histórico", () => {
     expect(screen.getByRole("heading", { name: "Enviar remessa" })).toBeTruthy();
     expect(screen.getByText("Conferir os documentos")).toBeTruthy();
     expect(screen.getByText("Alice Gestora")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Histórico" }));
+    await user.click(screen.getByRole("tab", { name: "Histórico" }));
     expect(screen.getByText("Tarefa Criada")).toBeTruthy();
     expect(screen.getByText("Por: Bob Operador")).toBeTruthy();
   });
@@ -308,5 +308,39 @@ describe("acessibilidade do modal", () => {
     await user.tab({ shift: true });
     expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
     unmount(); expect(document.activeElement).toBe(trigger); expect(document.body.style.overflow).toBe(""); trigger.remove();
+  });
+});
+
+describe("abas e foco na edição", () => {
+  it("navega abas com setas, Home e End e associa painel selecionado", async () => {
+    const { user } = openModal();
+    const details = screen.getByRole("tab", { name: "Detalhes" });
+    details.focus(); await user.keyboard("{ArrowRight}");
+    const history = screen.getByRole("tab", { name: "Histórico" });
+    expect(document.activeElement).toBe(history);
+    expect(history.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(history.id);
+    await user.keyboard("{Home}"); expect(document.activeElement).toBe(details);
+    await user.keyboard("{End}"); expect(document.activeElement).toBe(history);
+  });
+  it("preserva rascunho ao consultar histórico e devolve foco ao cancelar", async () => {
+    const { user } = openModal();
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Título"));
+    await user.type(screen.getByLabelText("Título"), " rascunho");
+    await user.click(screen.getByRole("tab", { name: "Histórico" }));
+    await user.keyboard("{Home}");
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Detalhes" }));
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Enviar remessa rascunho");
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Editar" }));
+  });
+  it("leva foco ao campo inválido depois de falha do servidor", async () => {
+    actions.updateTask.mockResolvedValueOnce({ success: false, message: "Revise o título", errors: { title: ["Título indisponível"] } });
+    const { user } = openModal();
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    await screen.findByText("Título indisponível");
+    expect(document.activeElement).toBe(screen.getByLabelText("Título"));
   });
 });

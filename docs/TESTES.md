@@ -35,7 +35,7 @@ npm run test:watch
 | `tests/task-ui.test.tsx` | Envio e limpeza do cadastro, preservação dos campos após falha, erros de transporte e negócio, nova tentativa, edição, histórico, confirmação/cancelamento do arquivamento e restauração, bloqueio de ações concorrentes e botões conforme perfil/unidade/estado |
 | `tests/calendar-ui.test.tsx` | Janeiro com month=0, período atual, navegação mensal/anual, passagem de ano, alternância de visão, abertura/fechamento de detalhes, doze meses, indicadores e seletor de demonstração |
 
-Resultado após o incremento 12, em 07/11/2026: **257 testes aprovados em 14 arquivos**, sem casos `todo`.
+Resultado após o incremento 13, em 07/11/2026: **264 testes aprovados em 14 arquivos**, sem casos `todo`.
 
 ## Banco isolado
 
@@ -111,3 +111,7 @@ Ações de integração também consultam a lista com SQLite real, verificando t
 ## Tema e modal acessível
 
 Três testes de tema verificam preferência do sistema, persistência e escolha explícita, além de retorno ao modo Sistema. Dois testes do modal verificam papel/nome de diálogo, Escape, contenção de foco e restauração de foco/rolagem. A verificação visual no Chrome incluiu temas claro e escuro, detalhes e campos de edição; não substitui auditoria completa de acessibilidade ou inspeção em dispositivos móveis.
+
+## Evolução da acessibilidade
+
+Sete novos casos verificam seleção/foco/painel nas abas pelo teclado, preservação de rascunho ao consultar histórico, foco após erro de campo, Hoje nas visões mensal/anual, marcação de data atual e preferência de tema com armazenamento bloqueado. Testes existentes foram ajustados para os papéis semânticos de abas.

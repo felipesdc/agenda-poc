@@ -160,3 +160,9 @@ O seletor **Tema**, no cabeçalho, oferece **Sistema**, **Claro** e **Escuro**. 
 O cabeçalho mantém acesso ao calendário e à lista. A visão anual ocupa a largura disponível; a navegação de período se reorganiza em telas menores. O calendário mensal permite rolagem horizontal em telas estreitas e dias com mais tarefas podem crescer. No celular, o seletor de demonstração deixa de cobrir o conteúdo.
 
 O modal anuncia um diálogo, recebe o foco, mantém Tab dentro dele e devolve o foco ao elemento de origem ao fechar. Escape fecha quando não há uma operação em andamento; a rolagem do fundo fica bloqueada. Há atalho **Pular para o conteúdo**, foco visível e respeito à preferência por movimento reduzido.
+
+### Navegação por teclado e orientação
+
+As abas **Detalhes** e **Histórico** do modal aceitam setas esquerda/direita e Home/End. A edição permanece preenchida ao consultar o histórico. Ao editar, o foco vai ao título; ao cancelar, volta a **Editar**. Erros de campo retornados pelo servidor levam o foco ao primeiro campo inválido. Campos e controles principais têm áreas maiores para interação por toque.
+
+O botão **Hoje** retorna ao mês/ano atual preservando a visão e demais filtros. A data atual aparece marcada nas visões mensal/anual, e mudanças no período são anunciadas de forma discreta para tecnologias assistivas. O seletor de tema mantém a escolha durante a sessão mesmo quando o navegador bloqueia armazenamento local.

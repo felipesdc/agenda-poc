@@ -152,3 +152,10 @@ Veja [TESTES.md](TESTES.md) para comandos, cobertura e limites. Nenhuma regra de
 - Inspeção no Chrome via controles nativos: lista em claro/escuro, abertura por teclado, detalhes e campos de edição em escuro, Escape fechando e devolvendo foco à tarefa. Sem salvar mudanças em tarefas. Preferência restaurada para Sistema.
 - Contrastes calculados para pares neutros: texto principal claro/superfície 15,77:1; secundário claro/fundo 5,09:1; texto suave claro/fundo 4,92:1; principal escuro/superfície 14,86:1; secundário escuro/superfície 8,03:1. São pares específicos, não uma certificação de acessibilidade da aplicação.
 - Layouts de telas menores ajustados no código; não foi realizada inspeção em dispositivo móvel. Sem migração ou alteração de dados de negócio neste incremento.
+
+## Incremento 13 — navegação e acessibilidade (07/11/2026)
+
+- 264 testes aprovados em 14 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22. Os testes de tarefa foram repetidos após os ajustes finais de foco e formulário.
+- Novos casos cobrem abas por setas/Home/End, associação dos painéis, rascunho preservado, foco em erro/cancelamento, Hoje nas duas visões, data atual e armazenamento de tema bloqueado.
+- No Chrome nativo, a árvore de acessibilidade reconheceu tablist/tab/tabpanel; Tab e seta direita selecionaram Histórico. Escape fechou e devolveu foco à tarefa. Sem alterações em dados de tarefas.
+- Sem migração. Inspeção com leitor de tela dedicado e dispositivo móvel não realizada; os resultados não representam certificação completa de acessibilidade.

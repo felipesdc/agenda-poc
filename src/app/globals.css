@@ -62,7 +62,7 @@
   button:not(:disabled), select, summary { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
   :focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
-  input:not([type="checkbox"]):not([type="radio"]), select, textarea { background-color: var(--surface); color: var(--foreground); }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { background-color: var(--surface); color: var(--foreground); min-height: 2.75rem; }
   input, select, textarea { accent-color: #2563eb; }
   input::placeholder, textarea::placeholder { color: var(--gray-400); }
   input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="true"] { border-color: #ef4444; }

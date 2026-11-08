@@ -117,3 +117,9 @@ A contagem define a paginação de 25 resultados; páginas fora do intervalo sã
 O script inicial em layout escolhe a preferência local ou o sistema antes da hidratação. ThemeSelect usa useSyncExternalStore para sincronizar a preferência entre instâncias/abas e escuta mudanças do sistema. A preferência não é uma configuração de conta. AppHeader mantém navegação e seletor em todas as páginas.
 
 TaskModal usa diálogo nomeado e efeito de ciclo de vida para foco/rolagem. O listener de teclado consulta as ações disponíveis ao tabular e useEffectEvent observa o estado atual de operação ao tratar Escape. As regras de negócio e autorização permanecem nas ações existentes.
+
+### Abas, foco e tema temporário
+
+TaskModal mantém os dois painéis montados e oculta o inativo via hidden, preservando o estado dos campos enquanto se consulta o histórico. As abas implementam tablist/tab/tabpanel, seleção e roving tabindex com setas/Home/End. A contenção de foco filtra controles em painéis ocultos e tabindex negativo. A edição foca título e o cancelamento restaura o botão Editar. TaskFields leva o foco ao primeiro aria-invalid após erro.
+
+ThemeSelect mantém uma preferência temporária em estado local quando localStorage recusa a gravação; a preferência explícita continua prevalecendo sobre alterações do tema do sistema durante a sessão.

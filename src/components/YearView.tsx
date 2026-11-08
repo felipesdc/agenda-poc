@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Employee, User } from "@prisma/client";
 import { getDayStatusColor, getTaskStatusColor, colorMap, taskStatusLabels, cn } from "@/lib/utils";
@@ -70,9 +70,10 @@ function MiniCalendar({ monthIndex, year, byDay, selectedDay, onSelectDay, onSel
         const dayTasks = inMonth ? byDay.get(key) || [] : [];
         const dayColor = getDayStatusColor(dayTasks);
         const label = `${format(day, "dd/MM/yyyy")}: ${dayTasks.length} ${dayTasks.length === 1 ? "tarefa" : "tarefas"}`;
-        return <button type="button" key={key} disabled={!inMonth || !dayTasks.length} aria-label={label} aria-pressed={selected === key} onClick={() => onSelectDay(key)} className={cn(
+        return <button type="button" key={key} disabled={!inMonth || !dayTasks.length} aria-current={inMonth && isSameDay(day, new Date()) ? "date" : undefined} aria-label={label} aria-pressed={selected === key} onClick={() => onSelectDay(key)} className={cn(
           "relative flex min-h-9 items-center justify-center rounded border border-transparent focus-visible:outline-2 focus-visible:outline-blue-600",
           !inMonth && "invisible", !dayTasks.length && "text-gray-400",
+          inMonth && isSameDay(day, new Date()) && "ring-2 ring-inset ring-blue-500",
           dayTasks.length > 0 && "font-semibold text-gray-900 hover:bg-blue-50",
           selected === key && "border-blue-600 bg-blue-50 dark:bg-blue-950/40",
         )}>
