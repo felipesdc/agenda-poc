@@ -44,3 +44,7 @@ next-env.d.ts
 
 # Modelo público de configuração, sem segredos
 !.env.example
+
+# Snapshots locais contêm dados e credenciais; não versionar.
+/backups/
+.agenda-snapshot-*/

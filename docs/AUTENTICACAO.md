@@ -90,3 +90,7 @@ Gestores podem criar o perfil de usuários da própria unidade em `/usuarios`, a
 ## Contas desativadas
 
 O gestor pode desativar outras contas de sua unidade em `/usuarios`. A alteração revoga sessões, bloqueia a criação de novas sessões por senha e impede o uso da sessão demo. A leitura do usuário autenticado exige isActive=true em cada acesso. O login mantém mensagem genérica para falha. A reativação exige novo login e preserva a senha existente. Provisionar/redefinir senha não reativa contas.
+
+## Preparação não destrutiva da demonstração
+
+`npm run demo:prepare` cria apenas os perfis fictícios ausentes, incluindo leitor@banco.com (Carlos). Exige modo demo, ambiente fora de produção e ausência de BETTER_AUTH_SECRET. Usa a unidade do administrador demo existente e não redefine nomes, papéis ou situação das contas. O seletor mostra erros quando o perfil não existe ou está desativado. A preparação por CLI, assim como o seed, não gera auditoria de alterações administrativas da interface.

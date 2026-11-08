@@ -29,6 +29,8 @@ async function mutate(
     }
     const message = await prisma.$transaction((tx) => operation(tx, user));
     revalidatePath("/");
+    revalidatePath("/tarefas");
+    revalidatePath("/validacoes");
     return { success: true, message, errors: {} };
   } catch (error) {
     if (error instanceof TaskActionError) return { success: false, message: error.message, errors: error.errors };
@@ -153,11 +155,14 @@ export async function validateTask(taskId: string): Promise<FormState> {
 }
 
 export async function switchUser(email: string) {
-  if (!isDemoModeEnabled()) return;
+  if (!isDemoModeEnabled()) return { success: false, message: "A troca de perfil só está disponível no modo de demonstração." };
   const user = await prisma.user.findUnique({ where: { email } });
-  if (user?.isActive) {
+  if (!user) return { success: false, message: "Perfil não cadastrado. Execute npm run demo:prepare no ambiente local." };
+  if (!user.isActive) return { success: false, message: "Esta conta está desativada. Um gestor precisa reativá-la." };
+  if (user.isActive) {
     const store = await cookies();
     store.set("userId", user.id, { secure: true, httpOnly: true, sameSite: "lax", path: "/", maxAge: 86400 });
     revalidatePath("/");
+    return { success: true, message: "Perfil alterado." };
   }
 }

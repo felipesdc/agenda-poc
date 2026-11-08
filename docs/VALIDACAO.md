@@ -159,3 +159,48 @@ Veja [TESTES.md](TESTES.md) para comandos, cobertura e limites. Nenhuma regra de
 - Novos casos cobrem abas por setas/Home/End, associação dos painéis, rascunho preservado, foco em erro/cancelamento, Hoje nas duas visões, data atual e armazenamento de tema bloqueado.
 - No Chrome nativo, a árvore de acessibilidade reconheceu tablist/tab/tabpanel; Tab e seta direita selecionaram Histórico. Escape fechou e devolveu foco à tarefa. Sem alterações em dados de tarefas.
 - Sem migração. Inspeção com leitor de tela dedicado e dispositivo móvel não realizada; os resultados não representam certificação completa de acessibilidade.
+
+## Incremento 14 — filtros de ponto focal e prazo (08/11/2026)
+
+- 284 testes aprovados em 15 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Novos casos: 12 de parâmetros, cinco de consultas SQLite e três de formulário/paginação da página em JSDOM.
+- Limites de datas incluem meia-noite inicial e último milissegundo final; filtros se combinam com vencidas sem sobrescrever restrições de data. Matrícula estrangeira/inexistente não retorna tarefas, e opções de visualizador não incluem e-mails ou pessoas exclusivas de outra unidade.
+- Tentativa no Chrome encontrou ERR_CONNECTION_REFUSED em localhost:3000, pois o servidor não estava em execução. A validação do formulário foi feita em JSDOM; não houve validação visual nem submissão GET no navegador nesta entrega.
+- Sem migração nem alteração de dados locais.
+
+## Incremento 15 — fila de validação (08/11/2026)
+
+- 292 testes aprovados em 15 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22, incluindo a rota dinâmica /validacoes.
+- SQLite real verifica autorização, isolamento por unidade, estados/arquivamento, conclusões antigas/legadas, busca, paginação e retirada da fila após validar com recorrência única. O contador passa a zero após validação.
+- JSDOM verifica modal com falha, nova tentativa, sucesso e lista vazia atualizada; há indicação de conclusão legada sem data.
+- Sem migração nem alteração de dados locais. Não houve validação visual em navegador neste incremento.
+
+## Incremento 16 — busca sem acentos (08/11/2026)
+
+- 303 testes aprovados em 16 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Testes verificam português/latim comum, formas Unicode decompostas, idempotência, divisão da migração com triggers e consultas reais após criação/edição/recorrência, inclusive na fila.
+- Backup local em `/private/tmp/agenda-poc-before-accent-search-20261108-132202.db`; migração aditiva aplicada por db:prepare e db:check sem diferenças.
+- Comparação das colunas anteriores nas 12 tabelas preexistentes confirmou preservação dos dados; dois triggers de busca instalados. As cinco tarefas locais tiveram searchText comparado ao normalizador da aplicação, sem divergências.
+- A mudança cobre o conjunto de acentos documentado; não oferece normalização universal de todos os alfabetos, correção ortográfica ou índice full-text. Não houve validação visual em navegador neste incremento.
+
+## Incremento 17 — backup e restauração (08/11/2026)
+
+- 309 testes aprovados em 17 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Seis casos de backup com SQLite real cobrem WAL, dados/histórico/triggers, permissões, sessões revogadas na cópia, recusa de sobrescrita/corrupção e migração inacabada.
+- CLI db:backup criou `backups/agenda-2026-11-08T16-26-23-862Z.db`, confirmado como ignorado pelo Git. db:restore criou `/private/tmp/agenda-poc-restored-20261108-162623.db`; db:check na cópia não encontrou diferenças.
+- Comparação confirmou preservação das 12 tabelas fora de AuthSession; a cópia restaurada contém zero sessões. O banco ativo e o .env não foram substituídos.
+- Não houve nova migração, agendamento, envio externo ou teste em outra máquina. O arquivo de backup local fica disponível para revisão.
+
+## Incremento 18 — exportação CSV (08/11/2026)
+
+- 329 testes aprovados em 19 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22, incluindo /api/tarefas/exportar.
+- Onze casos de serialização, sete de handler HTTP real/SQLite e dois de interface: autenticação/perfis/unidade, filtros, todas as páginas, limites, aspas/quebras/acentos e prefixos de fórmula.
+- A interface verifica download/liberação de URL temporária e mensagem de limite sem navegação para JSON. O handler usa no-store/nosniff e não inclui e-mails/campos internos.
+- Sem migração nem alteração de dados locais. Não houve download em navegador real ou abertura em Excel/LibreOffice nesta entrega; a neutralização de fórmulas é uma mitigação, sem garantia universal para todas as reimportações.
+
+## Correção — Carlos no demo e atalhos (08/11/2026)
+
+- Banco local tinha somente admin@banco.com e operador@banco.com. demo:prepare criou o leitor ausente sem alterar os cadastros existentes; não houve seed/reset.
+- Chrome confirmou entrada como Carlos Leitor/VIEWER, com formulário de cadastro e atalhos administrativos ausentes. A navegação abaixo do título foi inspecionada com dois atalhos separados, sem links concatenados.
+- 333 testes aprovados em 19 arquivos; lint, tipos e build `npm run build -- --webpack` aprovados com Node 22.
+- Novos testes verificam preparação idempotente/preservação de nome/perfil/situação, bloqueio com autenticação real e mensagens de falha no seletor. Sem nova migração ou alteração do .env.

@@ -389,3 +389,32 @@ describe("orientação temporal", () => {
     expect(yearly.container.querySelectorAll('[aria-current="date"]')).toHaveLength(1);
   });
 });
+
+describe("validação pela fila", () => {
+  it("informa conclusão e mantém detalhes abertos após falha de validação", async () => {
+    const { validateTask } = await import("../src/actions");
+    vi.mocked(validateTask).mockResolvedValueOnce({ success: false, message: "Falha ao validar" }).mockResolvedValueOnce({ success: true, message: "Validada" });
+    const task = taskFixture({ status: "COMPLETED", completedAt: new Date(2026,0,1,12) });
+    const user = userEvent.setup();
+    const { rerender } = render(<TaskList tasks={[task]} currentUser={admin} employees={[]} validationQueue />);
+    expect(screen.getByText(/Concluída em:/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Enviar remessa/ }));
+    await user.click(screen.getByRole("button", { name: /Validar/ }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Falha ao validar");
+    await user.click(screen.getByRole("button", { name: /Validar/ }));
+    expect(screen.queryByRole("heading", { name: "Enviar remessa" })).toBeNull();
+    rerender(<TaskList tasks={[]} currentUser={admin} employees={[]} validationQueue />);
+    expect(screen.getByText("Nenhuma tarefa aguardando validação nesta consulta.")).toBeTruthy();
+  });
+  it("informa ausência de data de conclusão legada", () => {
+    render(<TaskList tasks={[taskFixture({ status: "COMPLETED" })]} currentUser={admin} employees={[]} validationQueue />);
+    expect(screen.getByText("Data de conclusão não registrada")).toBeTruthy();
+  });
+});
+
+it("seletor demo mostra falha ao trocar para perfil ausente", async () => {
+  navigation.switchUser.mockResolvedValueOnce({ success: false, message: "Perfil não cadastrado. Execute npm run demo:prepare no ambiente local." });
+  render(<UserSwitcher currentUser={operator} />);
+  await userEvent.setup().click(screen.getByRole("button", { name: "Carlos (Visualizador)" }));
+  expect(screen.getByRole("alert").textContent).toContain("demo:prepare");
+});

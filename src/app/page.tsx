@@ -13,6 +13,7 @@ import UserSwitcher from "@/components/UserSwitcher";
 import { isDemoModeEnabled } from "@/lib/auth";
 import { getAgendaData } from "@/lib/tasks";
 import { resolveCalendarParams } from "@/lib/calendar-params";
+import { getValidationCount } from "@/lib/validation-queue";
 import { canWriteTasks } from "@/lib/permissions";
 
 export default async function Home({
@@ -43,6 +44,7 @@ export default async function Home({
     );
   }
 
+  const validationCount = currentUser.role === "ADMIN" ? await getValidationCount() : null;
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-50 px-4 py-6 pb-32 sm:px-8">
       <div className="max-w-7xl mx-auto">
@@ -52,12 +54,18 @@ export default async function Home({
           </h1>
           <p className="mt-2 text-sm text-gray-600">Acompanhe prazos, encontre pendências e mantenha os compromissos da unidade em dia.</p>
         </header>
-        {currentUser.role === "ADMIN" && <Link href="/usuarios" className="mb-6 inline-block text-blue-700 dark:text-blue-300 underline">Gerenciar usuários</Link>}
+
         {!isDemoModeEnabled() && <div className="mb-6 flex items-center justify-between gap-4">
           <p className="text-sm text-gray-700">{currentUser.name} · {currentUser.role}</p>
           <LogoutButton />
         </div>}
-        <Link href="/tarefas" className="mb-4 inline-block text-blue-700 dark:text-blue-300 underline">Lista de tarefas · busca e filtros</Link>
+        <nav aria-label="Atalhos da agenda" className="mb-6 flex flex-wrap items-center gap-3">
+          <Link href="/tarefas" className="inline-flex min-h-11 items-center rounded-lg border border-gray-300 bg-surface px-4 py-2 text-sm font-medium text-gray-900 hover:bg-muted">Buscar e filtrar tarefas</Link>
+          {currentUser.role === "ADMIN" && <Link href="/usuarios" className="inline-flex min-h-11 items-center rounded-lg border border-gray-300 bg-surface px-4 py-2 text-sm font-medium text-gray-900 hover:bg-muted">Gerenciar usuários</Link>}
+        </nav>
+        {validationCount !== null && <Link href="/validacoes" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+          <span className="font-semibold">Fila de validação</span><span>{validationCount} {validationCount === 1 ? "tarefa aguardando análise" : "tarefas aguardando análise"} · Todos os períodos →</span>
+        </Link>}
         <ArchiveFilter />
         {archived ? (
           <ArchivedTaskList tasks={tasks} currentUser={currentUser} />

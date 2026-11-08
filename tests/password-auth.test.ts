@@ -1,3 +1,4 @@
+import { migrationStatements } from "./helpers/migrations";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -27,7 +28,7 @@ beforeAll(async () => {
   for (const folder of (await readdir(resolve("prisma/migrations"))).sort()) {
     if (folder === "migration_lock.toml") continue;
     const sql = await readFile(resolve("prisma/migrations", folder, "migration.sql"), "utf8");
-    for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) await database.$executeRawUnsafe(statement);
+    for (const statement of migrationStatements(sql)) await database.$executeRawUnsafe(statement);
   }
   await database.unit.createMany({ data: [{ id: "unit", code: "U", name: "Unidade" }, { id: "other", code: "O", name: "Outra" }] });
   await database.user.createMany({ data: [

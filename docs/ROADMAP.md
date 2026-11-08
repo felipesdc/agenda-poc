@@ -103,7 +103,7 @@ Próximos passos: revisão de dependências e preparação operacional do piloto
 - Paginação de 25 resultados com filtros na URL e ordenação estável por prazo/id.
 - Modal compartilhado para consulta e ações conforme perfil.
 - Testes de parâmetros, consulta real com SQLite, isolamento, paginação e interface.
-- Filtros por ponto focal/intervalo de datas e busca sem acentos ficam para evolução posterior.
+- Ponto focal e datas foram entregues no incremento 14; busca sem acentos foi entregue no incremento 16.
 
 ## Incremento 12 entregue — consistência visual, temas e acessibilidade
 
@@ -122,6 +122,54 @@ Próximos passos: revisão de dependências e preparação operacional do piloto
 - Hoje preserva visão/filtros, data atual marcada e período anunciado.
 - Controles de formulário maiores e tema temporário quando armazenamento está bloqueado.
 - Verificação por teclado no Chrome e testes automatizados dos novos comportamentos.
+
+## Incremento 14 entregue — ponto focal e intervalo de prazo
+
+- Filtros combináveis por ponto focal e datas inclusivas, com um ou dois limites opcionais.
+- Preservação na URL/paginação e combinação com texto, estado e vencidas.
+- Opções limitadas a vínculos em tarefas ativas da unidade, sem diretório global para visualizadores.
+- Validação de datas/matrícula e erro explícito para intervalo inválido, sem ampliar a busca.
+- Testes de parâmetros, limites de dias, combinações, isolamento e formulário.
+
+## Incremento 15 entregue — fila de validação
+
+- Rota `/validacoes` exclusiva do gestor, com contador global da unidade na agenda.
+- Concluídas ativas de todos os períodos, busca por título/descrição e paginação.
+- Conclusões mais antigas primeiro e identificação de registros legados sem data.
+- Mesmo modal e ação transacional de validação; agenda/lista/fila revalidadas explicitamente.
+- Testes de autorização, unidade/estados, ordenação, paginação, recorrência e falha/sucesso no modal.
+
+## Incremento 16 entregue — busca sem acentos
+
+- Mesma busca normalizada na lista e na fila de validação.
+- Acentos portugueses/latinos comuns e diferenças de maiúsculas/minúsculas, preservando texto original.
+- Campo auxiliar com backfill e triggers transacionais para criação/edição/recorrência.
+- Migração aditiva, testes de equivalência, Unicode decomposto, atualização e permissões.
+
+## Incremento 17 entregue — backup e recuperação
+
+- Comandos administrativos db:backup/db:restore para SQLite, sem sobrescrever destinos.
+- Snapshot consistente via VACUUM INTO, verificação de integridade/vínculos/migrações e publicação após validação.
+- Restauração em banco novo, sessões revogadas apenas na cópia e sem alteração de .env.
+- Pasta de backups ignorada pelo Git e procedimento de recuperação documentado.
+- Testes de WAL, histórico/triggers, destino existente, corrupção e migração incompleta.
+- Remoção do banco local do versionamento, retenção, envio externo e revisão de dependências continuam pendentes.
+
+## Incremento 18 entregue — exportação CSV
+
+- Exportação dos filtros aplicados na lista, com todas as páginas até 5.000 tarefas.
+- Mesma autenticação e escopo de unidade, sem tarefas arquivadas ou campos internos.
+- UTF-8/BOM, separador ponto e vírgula, rótulos em português e escape de células.
+- Mitigação de prefixos de fórmula, download com feedback e erros claros sem truncamento.
+- Testes de escopo/perfis, filtros, limite, todas as páginas, formato e interface.
+
+## Correção após o incremento 18 — demonstração e atalhos
+
+- Diagnóstico: banco legado sem o usuário leitor@banco.com, apesar do botão Carlos estar visível.
+- Comando demo:prepare cria somente perfis faltantes e preserva cadastros existentes; bloqueado fora do modo demo.
+- Seletor mostra erros e estado de processamento; contas desativadas continuam bloqueadas.
+- Atalhos da agenda separados em navegação com espaçamento e aparência consistente.
+- Entrada como Carlos/VIEWER confirmada no Chrome.
 
 ## Etapa 1 — Escopo original e pendências
 

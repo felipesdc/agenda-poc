@@ -21,6 +21,7 @@ npm run test:watch
 | Arquivo | O que verifica |
 | --- | --- |
 | `tests/theme-ui.test.tsx` | Tema do sistema, persistência local, escolha explícita e acompanhamento de mudanças do sistema |
+| `tests/task-list-page.test.tsx` | Formulário GET acessível, valores de filtros, paginação e avisos de intervalo/ponto focal indisponível |
 | `tests/task-list-params.test.ts` | Normalização, limites, estado desconhecido, vencidas, páginas inválidas, parâmetros duplicados e URLs de paginação |
 | `tests/task-input.test.ts` | Frequência padrão, todas as frequências oferecidas, deduplicação de pontos focais, título sem espaços nas extremidades, datas inexistentes, matrícula inválida e arquivos em campos de texto |
 | `tests/archive-input.test.ts` | Motivo obrigatório, limites de tamanho, espaços e tipos inválidos |
@@ -35,13 +36,13 @@ npm run test:watch
 | `tests/task-ui.test.tsx` | Envio e limpeza do cadastro, preservação dos campos após falha, erros de transporte e negócio, nova tentativa, edição, histórico, confirmação/cancelamento do arquivamento e restauração, bloqueio de ações concorrentes e botões conforme perfil/unidade/estado |
 | `tests/calendar-ui.test.tsx` | Janeiro com month=0, período atual, navegação mensal/anual, passagem de ano, alternância de visão, abertura/fechamento de detalhes, doze meses, indicadores e seletor de demonstração |
 
-Resultado após o incremento 13, em 07/11/2026: **264 testes aprovados em 14 arquivos**, sem casos `todo`.
+Resultado após o incremento 18, em 07/11/2026: **333 testes aprovados em 19 arquivos**, sem casos `todo`.
 
 ## Banco isolado
 
 A integração cria um diretório exclusivo com `mkdtemp` e um SQLite novo a cada execução. A URL temporária é definida antes de importar a aplicação; a variável de ambiente original é restaurada ao finalizar. Nenhum comando de reset é aplicado ao banco do projeto.
 
-Os SQLs versionados de `prisma/migrations` são aplicados em ordem. O executor divide as instruções por ponto e vírgula; se as migrações passarem a conter triggers ou strings com esse caractere, será necessário adaptar o executor. Essa preparação valida o comportamento sobre o esquema versionado, mas não testa a CLI do Prisma nem sua tabela de controle de migrações.
+Os SQLs versionados de `prisma/migrations` são aplicados em ordem. O executor usa marcadores `-- statement-breakpoint` nas migrações novas que contêm triggers, preservando ponto e vírgula interno; as migrações antigas continuam divididas por ponto e vírgula. Essa preparação valida o comportamento sobre o esquema versionado, mas não testa a CLI do Prisma nem sua tabela de controle de migrações.
 
 As consultas Prisma e a auditoria são reais. As fronteiras `next/headers` e `next/cache` são substituídas para fornecer cookies e observar a revalidação sem iniciar o servidor Next. O construtor Prisma é envolvido apenas para rastrear e desconectar os clientes reais no fim da suíte. A auditoria agora usa o mesmo cliente transacional das ações. As tarefas são removidas entre os casos; o banco temporário é removido ao concluir.
 
@@ -115,3 +116,27 @@ Três testes de tema verificam preferência do sistema, persistência e escolha 
 ## Evolução da acessibilidade
 
 Sete novos casos verificam seleção/foco/painel nas abas pelo teclado, preservação de rascunho ao consultar histórico, foco após erro de campo, Hoje nas visões mensal/anual, marcação de data atual e preferência de tema com armazenamento bloqueado. Testes existentes foram ajustados para os papéis semânticos de abas.
+
+## Filtros de ponto focal e prazo
+
+Doze casos adicionais de parâmetros verificam datas civis/bissextas, Int32, intervalos invertidos, duplicação e preservação de todos os filtros na paginação. Cinco casos de consulta com SQLite real cobrem limites completos dos dias, intervalos abertos, combinação dos filtros, entradas inválidas sem ampliação e opções por unidade/perfil. Três casos da página verificam formulário GET, nomes acessíveis, valores, reinício da paginação e avisos sem expor cadastros externos.
+
+## Fila de validação
+
+Seis casos novos de integração verificam bloqueio de anônimos/operador/visualizador, escopo por unidade/estado/arquivamento, datas legadas, ordenação, busca, paginação e saída após validação com geração única da sucessora. Dois casos de interface exercitam data de conclusão, registro legado, falha mantendo modal aberto, nova tentativa e lista vazia após revalidação.
+
+## Busca sem acentos
+
+Sete casos novos verificam normalização de português/latim comum, formas decompostas, idempotência e divisão segura da migração com trigger. Quatro casos de integração exercitam título/descrição, manutenção por edição direta, recorrência e consulta da fila com permissões. O texto original é conferido separadamente do auxiliar. O backfill local foi comparado ao normalizador da aplicação para todas as tarefas preexistentes.
+
+## Backup e restauração
+
+Seis testes com SQLite temporário verificam resolução de caminhos, backup de dados WAL, preservação de histórico/triggers, revogação de sessões apenas na cópia restaurada, permissões do arquivo, recusa de sobrescrita/origem inválida e migração incompleta. O exercício da CLI também cria e restaura um backup do banco local em arquivo temporário, sem alterar o DATABASE_URL ativo.
+
+## CSV
+
+Onze testes do serializador verificam BOM/cabeçalho, acentos, delimitadores/aspas/quebras, rótulos e prefixos de fórmula/controles. Sete casos de integração exercitam o handler HTTP real com SQLite: autenticação, três perfis, isolamento de unidade, filtros, arquivadas, todas as páginas e limite. Dois casos de UI verificam download/liberação de URL e mensagem de erro permitindo nova tentativa.
+
+## Correção do modo demo
+
+Três casos de integração verificam preparação idempotente e não destrutiva, entrada como Carlos, bloqueio quando há segredo real e mensagens para perfil ausente/desativado. Um caso de interface verifica retorno de erro ao selecionar Carlos. No Chrome, Carlos foi selecionado e a interface exibiu Carlos Leitor/VIEWER, sem cadastro de tarefas ou atalhos administrativos.

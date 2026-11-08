@@ -10,7 +10,7 @@ export const admin: User = { ...operator, id: "admin", name: "Alice Gestora", ro
 
 export function taskFixture(overrides: Partial<TaskWithHistory> = {}): TaskWithHistory {
   return {
-    id: "task", sourceTaskId: null, archivedAt: null, archivedById: null, archiveReason: null, title: "Enviar remessa", description: "Conferir os documentos",
+    id: "task", sourceTaskId: null, archivedAt: null, archivedById: null, archiveReason: null, searchText: "enviar remessa\nconferir os documentos", title: "Enviar remessa", description: "Conferir os documentos",
     dueDate: new Date("2026-11-05T12:00:00Z"), status: "PENDING", frequency: "NONE",
     createdAt: new Date("2026-11-01T12:00:00Z"), completedAt: null, validatedAt: null,
     createdById: operator.id, unitId: operator.unitId, focalPoints: [employees[0]],

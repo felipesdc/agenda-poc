@@ -1,3 +1,4 @@
+import { migrationStatements } from "./helpers/migrations";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -56,8 +57,8 @@ beforeAll(async () => {
   for (const folder of (await readdir(migrations)).sort()) {
     if (folder === "migration_lock.toml") continue;
     const sql = await readFile(join(migrations, folder, "migration.sql"), "utf8");
-    // As migrações atuais só contêm DDL e comandos sem ';' dentro de strings.
-    for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) {
+    // Triggers usam marcadores explícitos para preservar o corpo da instrução.
+    for (const statement of migrationStatements(sql)) {
       await prisma.$executeRawUnsafe(statement);
     }
   }
@@ -782,5 +783,204 @@ describe("consulta da lista de tarefas", () => {
     expect(first.tasks).toHaveLength(25); expect(first.pages).toBe(2);
     expect(second.tasks.map((task) => task.id)).toEqual(["paged-25"]);
     expect((await list({ page: "999" })).page).toBe(2);
+  });
+});
+
+describe("filtros por ponto focal e prazo", () => {
+  async function list(params: Record<string, string> = {}) {
+    return (await import("../src/lib/task-list")).getTaskListData((await import("../src/lib/task-list-params")).resolveTaskListParams(params));
+  }
+  beforeEach(async () => {
+    await prisma.task.create({ data: { id: "range-start", title: "Remessa início", description: "Documentos", dueDate: new Date(2020,0,1,0,0,0), createdById: "operator-test", unitId: "unit-test", focalPoints: { connect: { id: 1001 } } } });
+    await prisma.task.create({ data: { id: "range-end", title: "Remessa fim", dueDate: new Date(2020,0,2,23,59,59,999), createdById: "operator-test", unitId: "unit-test", focalPoints: { connect: [{ id: 1001 }, { id: 1002 }] } } });
+    await prisma.task.create({ data: { id: "range-outside", title: "Fora", dueDate: new Date(2020,0,3,0,0,0), createdById: "operator-test", unitId: "unit-test" } });
+  });
+  it("inclui os limites completos dos dias e exclui o dia seguinte", async () => {
+    expect((await list({ from: "2020-01-01", to: "2020-01-02" })).tasks.map((task) => task.id)).toEqual(["range-start", "range-end"]);
+  });
+  it("permite apenas data inicial, apenas final e um mesmo dia", async () => {
+    expect((await list({ from: "2020-01-03" })).total).toBe(1);
+    expect((await list({ to: "2020-01-01" })).tasks.map((task) => task.id)).toEqual(["range-start"]);
+    expect((await list({ from: "2020-01-02", to: "2020-01-02" })).tasks.map((task) => task.id)).toEqual(["range-end"]);
+  });
+  it("combina ponto focal, intervalo, busca e vencidas sem duplicar tarefas", async () => {
+    const result = await list({ focalPoint: "1001", from: "2020-01-01", to: "2020-01-02", q: "Remessa", overdue: "true" });
+    expect(result.total).toBe(2);
+    expect((await list({ focalPoint: "1002", to: "2020-01-02" })).tasks.map((task) => task.id)).toEqual(["range-end"]);
+    expect((await list({ focalPoint: "1001", status: "VALIDATED" })).total).toBe(0);
+  });
+  it("não amplia a busca com datas ou matrículas inválidas", async () => {
+    const invalid: Record<string, string>[] = [{ from: "2020-02-30" }, { from: "2020-02-02", to: "2020-01-01" }, { focalPoint: "invalid" }];
+    for (const params of invalid) {
+      expect((await list(params)).tasks).toEqual([]);
+    }
+    expect((await list({ focalPoint: "999999" })).tasks).toEqual([]);
+  });
+  it("visualizador filtra sem receber diretório global ou e-mails das opções", async () => {
+    await prisma.employee.create({ data: { id: 1003, name: "Pessoa externa", email: "external-focal@test.invalid" } });
+    await prisma.task.create({ data: { id: "external-focal-task", title: "Outra unidade", dueDate: new Date(), createdById: "other-admin", unitId: "unit-other", focalPoints: { connect: { id: 1003 } } } });
+    context.cookies.set("userId", "viewer-test");
+    const result = await list({ focalPoint: "1001" });
+    expect(result.total).toBe(2); expect(result.employees).toEqual([]);
+    expect(result.focalOptions.map((entry) => entry.id)).toEqual([1001,1002]);
+    expect(result.focalOptions.every((entry) => !('email' in entry))).toBe(true);
+    expect((await list({ focalPoint: "1003" })).total).toBe(0);
+    context.cookies.clear();
+    expect((await list()).focalOptions).toEqual([]);
+    await prisma.task.delete({ where: { id: "external-focal-task" } });
+    await prisma.employee.delete({ where: { id: 1003 } });
+  });
+});
+
+describe("fila de validação", () => {
+  it.each(["operator-test", "viewer-test", ""])("recusa consulta e contador para %s", async (id) => {
+    context.cookies.set("userId", id);
+    const { getValidationQueue, getValidationCount } = await import("../src/lib/validation-queue");
+    expect(await getValidationQueue("", 1)).toBeNull(); expect(await getValidationCount()).toBeNull();
+  });
+  it("inclui apenas concluídas ativas da unidade em todos os períodos e ordena por conclusão", async () => {
+    context.cookies.set("userId", "admin-test");
+    await prisma.task.createMany({ data: [
+      { id: "q-first", title: "Antiga", status: "COMPLETED", dueDate: new Date(2020,0,1), completedAt: new Date(2026,0,1), unitId: "unit-test", createdById: "operator-test" },
+      { id: "q-last", title: "Recente", status: "COMPLETED", dueDate: new Date(2019,0,1), completedAt: new Date(2026,1,1), unitId: "unit-test", createdById: "operator-test" },
+      { id: "q-legacy", title: "Sem data", status: "COMPLETED", dueDate: new Date(2021,0,1), unitId: "unit-test", createdById: "operator-test" },
+      { id: "q-pending", title: "Pendente", status: "PENDING", dueDate: new Date(), unitId: "unit-test", createdById: "operator-test" },
+      { id: "q-validated", title: "Validada", status: "VALIDATED", dueDate: new Date(), unitId: "unit-test", createdById: "operator-test" },
+      { id: "q-archive", title: "Arquivada", status: "COMPLETED", archivedAt: new Date(), dueDate: new Date(), unitId: "unit-test", createdById: "operator-test" },
+      { id: "q-other", title: "Externa", status: "COMPLETED", dueDate: new Date(), unitId: "unit-other", createdById: "other-admin" },
+    ] });
+    const { getValidationQueue, getValidationCount } = await import("../src/lib/validation-queue");
+    expect(await getValidationCount()).toBe(3);
+    expect((await getValidationQueue("",1))?.tasks.map((task) => task.id)).toEqual(["q-legacy", "q-first", "q-last"]);
+    expect((await getValidationQueue("externa",1))?.total).toBe(0);
+  });
+  it("busca título/descrição e pagina com ordem estável", async () => {
+    context.cookies.set("userId", "admin-test");
+    await prisma.task.createMany({ data: Array.from({ length: 26 }, (_, index) => ({ id: `queue-${String(index).padStart(2,"0")}`, title: "Remessa", description: "Documentação fiscal", status: "COMPLETED", completedAt: new Date(2026,0,1), dueDate: new Date(2020,0,1), unitId: "unit-test", createdById: "operator-test" })) });
+    const { getValidationQueue } = await import("../src/lib/validation-queue");
+    expect((await getValidationQueue("REMESSA",1))?.tasks).toHaveLength(25);
+    const second = await getValidationQueue("fiscal",999);
+    expect(second?.page).toBe(2); expect(second?.tasks.map((task) => task.id)).toEqual(["queue-25"]);
+    expect((await getValidationQueue("ausente",1))?.total).toBe(0);
+  });
+  it("validar remove da fila, atualiza contador e revalida os três caminhos", async () => {
+    const task = await create({ frequency: "MONTHLY" });
+    expect((await actions.completeTask(task.id)).success).toBe(true);
+    context.cookies.set("userId", "admin-test");
+    const { getValidationQueue, getValidationCount } = await import("../src/lib/validation-queue");
+    expect(await getValidationCount()).toBe(1);
+    expect((await getValidationQueue("",1))?.tasks[0].history.some((entry) => entry.action === "COMPLETE")).toBe(true);
+    expect((await actions.validateTask(task.id)).success).toBe(true);
+    expect(await getValidationCount()).toBe(0);
+    expect((await getValidationQueue("",1))?.tasks).toEqual([]);
+    expect(await prisma.task.count({ where: { sourceTaskId: task.id } })).toBe(1);
+    for (const path of ["/", "/tarefas", "/validacoes"]) expect(context.revalidate).toHaveBeenCalledWith(path);
+  });
+});
+
+describe("busca sem acentos", () => {
+  async function list(q: string) {
+    return (await import("../src/lib/task-list")).getTaskListData((await import("../src/lib/task-list-params")).resolveTaskListParams({ q }));
+  }
+  it("encontra título e descrição com ou sem acentos, sem alterar a exibição", async () => {
+    const task = await create({ title: "Relatório de Validação", description: "Reunião de órgãos técnicos" });
+    for (const q of ["relatorio", "RELATÓRIO", "validacao", "reuniao", "ÓRGÃOS"]) expect((await list(q)).tasks.map((entry) => entry.id)).toEqual([task.id]);
+    const result = (await list("relatorio")).tasks[0];
+    expect(result.title).toBe("Relatório de Validação"); expect(result.description).toBe("Reunião de órgãos técnicos");
+  });
+  it("atualiza a busca após editar e não mantém termos antigos", async () => {
+    const task = await create({ title: "Relatório antigo", description: "Informações antigas" });
+    expect((await actions.updateTask(task.id, previous, taskForm({ title: "Reunião nova", description: "Órgão responsável" }))).success).toBe(true);
+    expect((await list("relatorio")).total).toBe(0);
+    expect((await list("reuniao")).total).toBe(1);
+    expect((await list("orgao")).total).toBe(1);
+  });
+  it("triggers também mantêm busca de gravações diretas e formas Unicode decompostas", async () => {
+    const task = await create();
+    await prisma.task.update({ where: { id: task.id }, data: { title: "Reunia\u0303o", description: "AÇAÍ e frequência" } });
+    expect((await list("reunião")).total).toBe(1);
+    expect((await list("ACAI")).total).toBe(1);
+    const { normalizeSearchText } = await import("../src/lib/search-text");
+    const row = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });
+    expect(row.searchText).toBe(normalizeSearchText(`${row.title}\n${row.description}`));
+  });
+  it("fila de validação usa a mesma busca e continua isolando unidade", async () => {
+    const task = await create({ title: "Análise de relatório", description: "Validação técnica", frequency: "MONTHLY" });
+    await actions.completeTask(task.id);
+    context.cookies.set("userId", "admin-test");
+    const { getValidationQueue } = await import("../src/lib/validation-queue");
+    expect((await getValidationQueue("ANALISE",1))?.tasks.map((entry) => entry.id)).toEqual([task.id]);
+    expect((await getValidationQueue("validacao",1))?.total).toBe(1);
+    await actions.validateTask(task.id);
+    const next = await prisma.task.findFirstOrThrow({ where: { sourceTaskId: task.id } });
+    expect((await list("analise")).tasks.map((entry) => entry.id)).toContain(next.id);
+    context.cookies.set("userId", "other-admin"); expect((await list("analise")).total).toBe(0);
+  });
+});
+
+describe("exportação CSV", () => {
+  async function exportCsv(query = "") { return (await import("../src/app/api/tarefas/exportar/route")).GET(new Request(`http://localhost/api/tarefas/exportar${query}`)); }
+  it("exige identificação e recusa filtros inválidos", async () => {
+    context.cookies.clear(); expect((await exportCsv()).status).toBe(401);
+    context.cookies.set("userId", "operator-test");
+    expect((await exportCsv("?from=2026-02-30")).status).toBe(400);
+  });
+  it.each(["operator-test", "viewer-test", "admin-test"])("exporta apenas dados da unidade para %s", async (id) => {
+    await create({ title: "Relatório exportável", focalPoints: ["1001"] });
+    await prisma.task.create({ data: { id: "export-other", title: "Segredo de outra unidade", unitId: "unit-other", createdById: "other-admin", dueDate: new Date() } });
+    context.cookies.set("userId", id);
+    const response = await exportCsv("?q=relatorio&focalPoint=1001&unitId=unit-other");
+    expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    expect(response.headers.get("content-disposition")).toContain("attachment");
+    const content = await response.text();
+    expect(content).toContain("Relatório exportável"); expect(content).not.toContain("Segredo de outra unidade");
+    expect(content).not.toContain("@test.invalid"); expect(content).not.toContain("searchText");
+  });
+  it("respeita estado, prazo, ponto focal, vencidas e exclusão de arquivadas", async () => {
+    const task = await create({ title: "Relatório alvo", dueDate: "2020-01-01", focalPoints: ["1001"] });
+    await create({ title: "Relatório de outro prazo", dueDate: "2020-02-01", focalPoints: ["1001"] });
+    await create({ title: "Relatório sem ponto focal", dueDate: "2020-01-01" });
+    const response = await exportCsv("?q=relatorio&status=PENDING&overdue=true&from=2020-01-01&to=2020-01-01&focalPoint=1001");
+    expect((await response.text()).split("\r\n")).toHaveLength(3);
+    context.cookies.set("userId", "admin-test"); await actions.archiveTask(task.id,"Arquivada para teste");
+    expect(await (await exportCsv("?q=relatorio%20alvo")).text()).not.toContain("Relatório alvo");
+  });
+  it("exporta todas as páginas e não só os 25 itens exibidos", async () => {
+    await prisma.task.createMany({ data: Array.from({ length: 26 }, (_, index) => ({ title: `Exportável ${index}`, unitId: "unit-test", createdById: "operator-test", dueDate: new Date(2026,0,1) })) });
+    const response = await exportCsv("?page=2");
+    expect((await response.text()).split("\r\n")).toHaveLength(28);
+  });
+  it("recusa exportação acima do limite em vez de truncar", async () => {
+    vi.spyOn(prisma.task, "count").mockResolvedValueOnce(5001);
+    const response = await exportCsv(); expect(response.status).toBe(413);
+    expect((await response.json()).message).toContain("Refine os filtros");
+  });
+});
+
+describe("preparação dos perfis de demonstração", () => {
+  it("cria Carlos na unidade existente sem redefinir nomes, perfis ou situação", async () => {
+    await prisma.user.create({ data: { id: "legacy-demo-admin", name: "Nome preservado", email: "admin@banco.com", role: "VIEWER", isActive: false, unitId: "unit-test" } });
+    try {
+      const { prepareDemoProfiles } = await import("../src/lib/demo-profiles");
+      await prepareDemoProfiles(prisma); await prepareDemoProfiles(prisma);
+      expect(await prisma.user.findUniqueOrThrow({ where: { email: "admin@banco.com" } })).toMatchObject({ name: "Nome preservado", role: "VIEWER", isActive: false });
+      const carlos = await prisma.user.findUniqueOrThrow({ where: { email: "leitor@banco.com" } });
+      expect(carlos).toMatchObject({ role: "VIEWER", isActive: true, unitId: "unit-test" });
+      expect((await actions.switchUser("leitor@banco.com"))?.success).toBe(true);
+      expect((await getCurrentUser())?.id).toBe(carlos.id);
+    } finally { await prisma.user.deleteMany({ where: { email: { in: ["admin@banco.com", "operador@banco.com", "leitor@banco.com"] } } }); }
+  });
+  it("recusa preparação com autenticação real configurada", async () => {
+    const previousSecret = process.env.BETTER_AUTH_SECRET;
+    process.env.BETTER_AUTH_SECRET = "segredo-de-teste";
+    try { await expect((await import("../src/lib/demo-profiles")).prepareDemoProfiles(prisma)).rejects.toThrow("somente em desenvolvimento"); }
+    finally { if (previousSecret === undefined) delete process.env.BETTER_AUTH_SECRET; else process.env.BETTER_AUTH_SECRET = previousSecret; }
+  });
+  it("informa quando o perfil não existe ou está desativado", async () => {
+    expect((await actions.switchUser("missing@test.invalid"))?.message).toContain("demo:prepare");
+    await prisma.user.update({ where: { id: "viewer-test" }, data: { isActive: false } });
+    try { expect((await actions.switchUser("viewer@test.invalid"))?.message).toContain("desativada"); }
+    finally { await prisma.user.update({ where: { id: "viewer-test" }, data: { isActive: true } }); }
   });
 });

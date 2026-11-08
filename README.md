@@ -40,7 +40,7 @@ npm run dev
 
 Abra http://localhost:3000/login. O comando pede uma senha de 12 a 128 caracteres, sem exibi-la. O passo a passo, incluindo redefinição e revogação de sessões, está em [AUTENTICACAO.md](docs/AUTENTICACAO.md).
 
-Para a demonstração local sem senha, mantenha `BETTER_AUTH_SECRET` vazio e use `DEMO_MODE=true`. Os perfis disponíveis são:
+Para a demonstração local sem senha, mantenha `BETTER_AUTH_SECRET` vazio e use `DEMO_MODE=true`. Em instalações antigas, execute `npm run demo:prepare` para criar apenas os perfis faltantes, sem redefinir os existentes. Os perfis disponíveis são:
 
 | Perfil de demonstração | E-mail |
 | --- | --- |
@@ -76,6 +76,8 @@ Operadores e visualizadores consultam o arquivo da própria unidade; arquivar e 
 | Comando | Finalidade |
 | --- | --- |
 | `npm run dev` | Servidor de desenvolvimento |
+| `npm run db:backup` | Cria e verifica um snapshot SQLite em backups/ |
+| `npm run db:restore -- --source backup.db --output novo.db` | Restaura em arquivo novo e revoga sessões da cópia |
 | `npm run db:prepare` | Gera cliente Prisma e aplica migrações pendentes, sem reset ou seed |
 | `npm run db:status` | Confere migrações pendentes |
 | `npm run db:check` | Compara o banco configurado com o schema, falhando se houver diferenças |
@@ -151,7 +153,7 @@ Na agenda, abra **Lista de tarefas · busca e filtros** (`/tarefas`). A lista co
 
 Resultados são ordenados pelo prazo, com 25 tarefas por página. Filtros ficam na URL e são preservados na paginação; aplicar uma nova busca reinicia a página. **Limpar filtros** restaura a consulta geral. Clique em uma tarefa para consultar detalhes, histórico e ações conforme seu perfil. Não há nova migração.
 
-A busca usa `contains` do SQLite: aceita correspondência parcial, mas não remove acentos nem oferece equivalência completa entre maiúsculas/minúsculas em caracteres acentuados. O termo é limitado a 120 caracteres. Esta primeira versão não inclui filtros por ponto focal ou intervalo personalizado de datas.
+A busca aceita correspondência parcial e normaliza acentos portugueses/latinos comuns e diferenças entre maiúsculas e minúsculas. O termo é limitado a 120 caracteres. A lista também permite filtros por ponto focal e intervalo de prazo.
 
 ## Aparência e acessibilidade
 
@@ -166,3 +168,43 @@ O modal anuncia um diálogo, recebe o foco, mantém Tab dentro dele e devolve o 
 As abas **Detalhes** e **Histórico** do modal aceitam setas esquerda/direita e Home/End. A edição permanece preenchida ao consultar o histórico. Ao editar, o foco vai ao título; ao cancelar, volta a **Editar**. Erros de campo retornados pelo servidor levam o foco ao primeiro campo inválido. Campos e controles principais têm áreas maiores para interação por toque.
 
 O botão **Hoje** retorna ao mês/ano atual preservando a visão e demais filtros. A data atual aparece marcada nas visões mensal/anual, e mudanças no período são anunciadas de forma discreta para tecnologias assistivas. O seletor de tema mantém a escolha durante a sessão mesmo quando o navegador bloqueia armazenamento local.
+
+### Ponto focal e intervalo de prazo
+
+Na lista, selecione um **Ponto focal** e/ou preencha **Prazo a partir de** e **Prazo até**. Os dias inicial e final são incluídos por inteiro. Você pode informar somente uma das datas. Todos os filtros se combinam: texto, estado, ponto focal, datas e vencidas. Com **Todas as vencidas**, o intervalo restringe as pendências anteriores a hoje.
+
+As opções de ponto focal mostram apenas nome/matrícula de pessoas vinculadas a tarefas ativas da sua unidade; nenhuma opção revela cadastros exclusivos de outras unidades. Visualizadores podem filtrar sem receber o diretório global para edição. Matrículas indisponíveis retornam zero tarefas. Datas inexistentes, intervalo invertido e matrículas inválidas exibem erro sem executar a busca de tarefas. Filtros seguem na URL ao paginar; aplicar ou limpar reinicia a página. Sem migração nova.
+
+## Fila de validação
+
+Entre como gestor e abra **Fila de validação** na agenda (`/validacoes`). O contador reúne todas as tarefas concluídas e ativas da unidade, independentemente do mês/ano do calendário. Operadores, visualizadores e anônimos não têm acesso à consulta nem ao contador.
+
+A fila mostra primeiro as conclusões mais antigas, informa a data de conclusão e permite buscar por título/descrição. Registros legados sem data aparecem no início e exibem esse aviso. Há 25 tarefas por página. Abra uma tarefa, confira detalhes/histórico e clique em **Validar** no modal. Se a operação falhar, o modal permanece aberto para nova tentativa.
+
+Validação usa a mesma transação e regra de recorrência já existente. Após sucesso, a tarefa sai da fila e o contador é atualizado; a sucessora recorrente continua como pendente na agenda. Concluir, validar, arquivar e restaurar revalidam explicitamente agenda, lista e fila. Não há validação em lote nem nova migração.
+
+## Busca com ou sem acentos
+
+A lista e a fila de validação encontram **Relatório** com `relatorio`, **Validação** com `VALIDACAO` e **Reunião** com `reuniao`. A normalização cobre os acentos portugueses e latinos comuns (á/à/â/ã/ä/å, é/è/ê/ë, í/ì/î/ï, ó/ò/ô/õ/ö, ú/ù/û/ü, ç, ñ, ý/ÿ), suas formas maiúsculas e marcas combinantes Unicode. Não é busca aproximada nem correção ortográfica.
+
+Título e descrição originais continuam intactos na interface e no histórico. O banco mantém um campo auxiliar atualizado por triggers em inserções/edições, inclusive recorrências e seed. A migração `20261108000000_accent_search` preenche esse campo para tarefas existentes. Faça backup e execute `npm run db:prepare` nas outras instalações; reinicie o servidor após gerar o cliente Prisma. Use as migrações versionadas, pois `db push` não instala os triggers. A busca continua por substring, sem índice full-text.
+
+## Backup e recuperação
+
+Execute `npm run db:backup` antes de migrações ou atualizações. O arquivo é criado em `backups/`, fora do Git, e verificado após a gravação. Para restaurar sem substituir o banco ativo: `npm run db:restore -- --source backups/arquivo.db --output backups/restaurado.db`. O destino precisa ser novo; o comando revoga sessões na cópia e não altera seu `.env`.
+
+Procedimento completo, limites e exercício de recuperação em [OPERACAO.md](docs/OPERACAO.md). Os arquivos contêm dados e credenciais de autenticação; mantenha-os em local protegido.
+
+## Exportar tarefas em CSV
+
+Na lista de tarefas, aplique os filtros e clique em **Exportar CSV**. O arquivo inclui todos os resultados da consulta, independentemente da página, até 5.000 tarefas. Acima desse limite, refine os filtros; a aplicação não gera arquivo parcial. Campos alterados no formulário só entram na exportação depois de **Aplicar filtros**.
+
+O CSV usa UTF-8 com BOM, separador ponto e vírgula e datas dd/MM/aaaa. Colunas: título, descrição, prazo, estado, periodicidade e nomes dos pontos focais. Todos os perfis autenticados podem exportar apenas tarefas ativas da própria unidade. O arquivo não inclui e-mails, sessões, auditoria ou campos internos de busca. Consulta vazia gera somente cabeçalho.
+
+Aspas e quebras são escapadas; valores com prefixos que podem ser interpretados como fórmula recebem apóstrofo para serem tratados como texto, conforme a mitigação descrita em [CWE-1236](https://cwe.mitre.org/data/definitions/1236.html). Esse marcador pode aparecer ao importar o arquivo como texto. Ao importar manualmente em planilhas, mantenha as colunas textuais como texto. Não foi verificada a abertura em todas as versões de planilhas. Nenhuma exportação é enviada automaticamente a terceiros.
+
+### Perfil demo ausente
+
+Se Carlos ou outro perfil de demonstração ainda não existe no banco, execute `npm run demo:prepare`. O comando é permitido somente fora de produção, com DEMO_MODE=true e sem segredo de autenticação real. Cria os perfis fictícios faltantes na unidade do administrador demo existente; não modifica nomes/perfis, não reativa contas e não cria senhas. Se não houver essa unidade, prepara a unidade fictícia U001.
+
+O seletor agora informa perfil inexistente, conta desativada e falha de conexão. Uma conta desativada deve ser reativada pelo gestor, sem usar a preparação para contornar o bloqueio. Os atalhos de busca e gestão aparecem em uma navegação própria, separados e com áreas de clique acessíveis.

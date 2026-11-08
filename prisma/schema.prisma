@@ -70,6 +70,7 @@ model Task {
   id          String      @id @default(cuid())
   title       String
   description String?
+  searchText  String      @default("") // Mantido por triggers SQLite; somente para busca.
   dueDate     DateTime
   status      TaskStatus  @default(PENDING)
   

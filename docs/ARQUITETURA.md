@@ -108,7 +108,7 @@ StatusCards recebe tarefas com histórico, usuário e funcionários do mesmo flu
 
 `/tarefas` normaliza parâmetros com `resolveTaskListParams` e consulta `getTaskListData`. Busca e estado são aplicados no Prisma, sempre com unitId da sessão e archivedAt=null. A opção overdue define status PENDING e dueDate anterior ao início do dia, seguindo a mesma data civil local das regras do calendário. Não há dependência dos parâmetros de mês/ano.
 
-A contagem define a paginação de 25 resultados; páginas fora do intervalo são ajustadas para a última disponível. A ordenação por dueDate/id evita empates instáveis. Histórico e pontos focais acompanham apenas as tarefas da página; o diretório para edição só é carregado para operador/gestor. Anônimos não recebem dados. TaskList mantém o id selecionado e deriva o modal das props atuais. Formulário GET mantém filtros na URL e reinicia a página a cada aplicação. A busca segue as limitações de contains/SQLite para acentos.
+A contagem define a paginação de 25 resultados; páginas fora do intervalo são ajustadas para a última disponível. A ordenação por dueDate/id evita empates instáveis. Histórico e pontos focais acompanham apenas as tarefas da página; o diretório para edição só é carregado para operador/gestor. Anônimos não recebem dados. TaskList mantém o id selecionado e deriva o modal das props atuais. Formulário GET mantém filtros na URL e reinicia a página a cada aplicação. A busca usa texto normalizado para acentos, mantendo o operador contains do SQLite.
 
 ## Temas e camada visual
 
@@ -123,3 +123,37 @@ TaskModal usa diálogo nomeado e efeito de ciclo de vida para foco/rolagem. O li
 TaskModal mantém os dois painéis montados e oculta o inativo via hidden, preservando o estado dos campos enquanto se consulta o histórico. As abas implementam tablist/tab/tabpanel, seleção e roving tabindex com setas/Home/End. A contenção de foco filtra controles em painéis ocultos e tabindex negativo. A edição foca título e o cancelamento restaura o botão Editar. TaskFields leva o foco ao primeiro aria-invalid após erro.
 
 ThemeSelect mantém uma preferência temporária em estado local quando localStorage recusa a gravação; a preferência explícita continua prevalecendo sobre alterações do tema do sistema durante a sessão.
+
+## Filtros de ponto focal e datas
+
+TaskListFilters inclui focalPoint, from, to e errors. O parser valida datas ISO civis com Zod e matrículas inteiras positivas Int32, recusa duplicação nesses parâmetros e intervalos invertidos. Erros impedem count/findMany de tarefas, sem ampliar silenciosamente a consulta.
+
+O Prisma combina focalPoints.some(id) com dueDate.gte/lte e, quando vencidas está ativo, dueDate.lt do início de hoje. Os limites de datas usam o mesmo fuso local do servidor que o calendário e incluem os dias completos. As opções do seletor são consultadas independentemente da página/busca, limitadas a funcionários com vínculo em tarefas ativas da unidade, selecionando somente id/name. O diretório usado para edição mantém a regra de perfil existente. Não há migração.
+
+## Fila de validação
+
+`/validacoes` usa getValidationQueue/getValidationCount, que verificam a sessão e exigem ADMIN antes de consultar tarefas. O where fixa unidade da sessão, archivedAt=null e status=COMPLETED, sem filtro de mês/ano. A busca opcional é limitada a 120 caracteres; paginação de 25 registros ajusta páginas fora do intervalo. A ordenação usa completedAt/dueDate/id para priorizar conclusões antigas com desempate estável. SQLite coloca completedAt nulo primeiro; a interface identifica registros legados sem data.
+
+TaskList em modo validationQueue mostra a data de conclusão e texto vazio específico, reutilizando TaskModal. O diretório de edição não é necessário, pois tarefas concluídas não aceitam edição. A ação validateTask mantém autorização/transação/recorrência existentes. O wrapper de mutações de tarefas revalida /, /tarefas e /validacoes. A contagem da agenda ignora a busca da fila e o período do calendário.
+
+## Normalização da busca
+
+Task.searchText concatena título e descrição com separador de linha e aplica a mesma tabela de substituições de normalizeSearchText. A migração preenche os registros existentes e instala Task_search_insert/Task_search_update; o segundo dispara apenas quando título/descrição são gravados, evitando recursão quando o campo auxiliar é atualizado. Os triggers participam da transação da escrita.
+
+As consultas da lista/fila normalizam o termo antes de aplicar contains em searchText, preservando unidade, estado, datas, ponto focal e paginação. O texto original permanece disponível para exibição e auditoria. O escopo cobre acentos portugueses/latinos comuns e marcas combinantes U+0300–U+036F, sem case folding universal ou busca fuzzy. Não há índice full-text; a mudança corrige equivalência textual, não garante melhoria de desempenho.
+
+Migrações com triggers usam `-- statement-breakpoint` para delimitar instruções completas nos executores de integração. A CLI Prisma aplica o SQL original; a comparação de schema não verifica presença de triggers, por isso os testes exercitam a atualização do campo em gravações reais.
+
+## Snapshots administrativos
+
+`database-backup.ts` cria snapshots SQLite por VACUUM INTO em um diretório temporário privado junto ao destino. Depois de verificar integridade, foreign keys, tabelas obrigatórias e migrações inacabadas, sincroniza o arquivo e usa hard link para publicar sem substituir um destino existente. O diretório temporário é removido ao finalizar. Não há endpoint web para essas operações.
+
+O modo restore verifica a origem e solicita a revogação de AuthSession apenas no snapshot antes da validação/publicação. As demais tabelas e os triggers permanecem no arquivo restaurado. O script não modifica o DATABASE_URL nem sobrescreve o banco ativo. Backups padrão ficam em pasta ignorada; não há envio externo ou agendamento.
+
+## Exportação CSV
+
+GET /api/tarefas/exportar autentica a sessão, normaliza os mesmos parâmetros da lista e usa taskListWhere compartilhado. A unidade vem da sessão; page é ignorado. A consulta seleciona apenas as colunas necessárias e nomes de pontos focais, excluindo arquivadas. O limite de 5.000 é verificado pela contagem e novamente pelo tamanho do resultado, impedindo truncamento silencioso se houver inserções concorrentes.
+
+Respostas usam private/no-store e nosniff; o download tem text/csv UTF-8 e Content-Disposition attachment. Filtros inválidos retornam 400, anônimo 401, excesso 413 e falhas 500 sem detalhes internos. ExportTasksButton controla processamento, mostra erros sem navegar para JSON e libera o objeto de download após iniciar a transferência.
+
+TasksToCsv emite BOM, ponto e vírgula, aspas em todas as células, aspas internas duplicadas e CRLF entre registros. Prefixos de fórmula/controles recebem apóstrofo. Essa medida é mitigação para a exportação, não uma garantia universal para reimportação/regravação em qualquer aplicativo de planilha.
