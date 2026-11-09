@@ -227,3 +227,34 @@ Acesso a tarefas de outras unidades é bloqueado. O gestor pode validar a própr
 ## Primeiro incremento recomendado
 
 Com login, autorização e integridade implementados, priorizar gestão de usuários, seguidas da revisão de dependências e preparação operacional antes do piloto. Lembretes e integrações vêm após estabilizar esse fluxo.
+
+## Incremento 19 — Meu dia e duplicação (entregue)
+
+- `/meu-dia`: pendências da unidade por vencidas, hoje e próximos sete dias, filtro por ponto focal, contadores e acesso ao painel existente de detalhes/ações.
+- Até 25 tarefas por grupo, com ligação para a consulta completa na lista; somente pendentes e não arquivadas.
+- Duplicação pelo painel compartilhado: campos revisáveis, prazo inicialmente vazio, nova tarefa pendente com auditoria própria; permissões do cadastro mantidas no servidor.
+- Sem migração de banco. Associação automática entre usuário e ponto focal permanece uma decisão futura.
+
+## Incremento 20 — Filtros favoritos (entregue)
+
+- Consultas nomeadas na lista, com aplicação por link, indicação da consulta atual e remoção.
+- Preserva filtros aplicados e reinicia a paginação; datas fixas e vencidas relativas ao dia atual.
+- Armazenamento local versionado, separado por usuário e unidade, com limite de dez favoritos; sem migração de banco.
+- Validação de nomes e destinos, recuperação de dados corrompidos, falhas de armazenamento com nova tentativa e atualização entre abas.
+- Sincronização entre dispositivos e compartilhamento de favoritos permanecem fora desta versão.
+
+## Incremento 21 — Comentários nas tarefas (entregue)
+
+- Seção recolhível no painel compartilhado de detalhes, sem modificar as abas de detalhes e histórico.
+- Publicação por administradores/operadores em tarefas não arquivadas da própria unidade; leitura também para visualizadores e tarefas arquivadas.
+- Autor registrado no momento da publicação, data e texto limitado a 2.000 caracteres; sem edição/exclusão.
+- Carregamento sob demanda, paginação de 20 itens, estados de erro com nova tentativa e preservação de rascunho em falha.
+- Migração aditiva `20261109000000_task_comments`, aplicada localmente após backup. Comentários não são copiados em duplicações ou recorrências.
+
+## Incremento 22 — Central de pendências (entregue)
+
+- `/pendencias` acessível pela navegação, com lista unificada e categorias: vencidas, hoje, próximos 15 dias e validações exclusivas do gestor.
+- Contadores por categoria, paginação de 25 registros e reaproveitamento do painel compartilhado de detalhes/ações/comentários.
+- Consultas por unidade e perfil no servidor, sem arquivadas ou validadas; validações de todos os períodos.
+- Botão de atualização manual, horário da última consulta e revalidação da rota após ações de tarefas.
+- Sem migração, notificações externas ou rastreamento de leitura. “Meu dia” e fila de validação mantêm suas funções existentes.

@@ -208,3 +208,31 @@ Aspas e quebras são escapadas; valores com prefixos que podem ser interpretados
 Se Carlos ou outro perfil de demonstração ainda não existe no banco, execute `npm run demo:prepare`. O comando é permitido somente fora de produção, com DEMO_MODE=true e sem segredo de autenticação real. Cria os perfis fictícios faltantes na unidade do administrador demo existente; não modifica nomes/perfis, não reativa contas e não cria senhas. Se não houver essa unidade, prepara a unidade fictícia U001.
 
 O seletor agora informa perfil inexistente, conta desativada e falha de conexão. Uma conta desativada deve ser reativada pelo gestor, sem usar a preparação para contornar o bloqueio. Os atalhos de busca e gestão aparecem em uma navegação própria, separados e com áreas de clique acessíveis.
+
+### Meu dia e duplicação de tarefas
+
+Acesse **Meu dia** na navegação para acompanhar pendências da unidade em três grupos: vencidas, hoje e os próximos sete dias (amanhã até o sétimo dia, inclusive). O filtro por ponto focal vale para os três grupos. Cada grupo mostra até 25 tarefas, o total e um link para consultar todas na lista. Datas seguem o fuso do servidor, como nos filtros existentes; configure o ambiente com o fuso da unidade. A visão é da unidade, sem associação automática entre usuário e ponto focal.
+
+Nos detalhes de qualquer tarefa da própria unidade, administradores e operadores podem escolher **Duplicar tarefa**. O formulário preserva título, descrição, periodicidade e pontos focais, mas exige escolher um prazo. A confirmação usa o cadastro existente e cria uma tarefa pendente com novo identificador e histórico próprio, sem copiar validação, arquivamento ou vínculo de recorrência. Cancelar não altera a tarefa original. Visualizadores têm acesso de leitura ao Meu dia.
+
+### Filtros favoritos
+
+Na lista de tarefas, aplique uma consulta e use **Filtros favoritos** para dar um nome e salvar. O favorito conserva busca, estado, ponto focal, intervalo de prazo e opção de vencidas; abre sempre na primeira página. Alterações ainda não aplicadas no formulário não são salvas. Datas do intervalo são fixas; “Todas as vencidas” usa o dia atual ao consultar.
+
+Cada usuário pode salvar até dez favoritos por unidade neste navegador. É possível removê-los e salvar uma consulta nova; nomes repetidos não sobrescrevem favoritos existentes. Os favoritos usam armazenamento local e não são sincronizados entre dispositivos nem incluídos no backup SQLite. Limpar os dados do navegador remove os favoritos. As consultas continuam sujeitas à sessão e ao isolamento por unidade no servidor.
+
+### Comentários nas tarefas
+
+Abra uma tarefa em qualquer visão e selecione **Ver comentários** nos detalhes. Administradores e operadores podem publicar texto de até 2.000 caracteres em tarefas ativas da própria unidade, inclusive concluídas e validadas. Visualizadores podem ler. Tarefas arquivadas mantêm a conversa disponível somente para leitura.
+
+Cada comentário registra autor, data e texto, separado do histórico automático de ações. As mensagens são exibidas como texto, sem HTML, com as mais recentes primeiro e 20 por página. Não há edição, exclusão ou envio de notificações nesta versão. Duplicações e novas ocorrências de uma tarefa recorrente começam sem comentários.
+
+Este incremento inclui a migração `20261109000000_task_comments`. Em outras instalações, execute `npm run db:prepare` e reinicie o servidor. Os comentários são armazenados no SQLite e incluídos nos backups do banco.
+
+### Central de pendências
+
+A entrada **Pendências** na navegação reúne alertas da unidade em `/pendencias`: vencidas, prazo hoje e próximos 15 dias (amanhã até o 15º dia, inclusive). Para gestores, inclui também tarefas concluídas aguardando validação, de qualquer período. Operadores e visualizadores recebem apenas os alertas de prazo; a consulta de validações exige perfil de gestor no servidor.
+
+Os contadores permitem filtrar a lista, que mostra 25 tarefas por página, ordenadas pelo prazo. Abra qualquer tarefa para usar os mesmos detalhes, comentários e ações das outras visões. Tarefas arquivadas e validadas ficam fora da central. Use **Atualizar pendências** para buscar mudanças de outras pessoas; não há envio de notificações nem atualização periódica automática. Para analisar validações por ordem de conclusão, o gestor pode abrir a fila de validação existente.
+
+A central é uma visão da unidade, complementar ao **Meu dia**, que mantém seu horizonte de sete dias e filtro por ponto focal. Não é necessária migração de banco.

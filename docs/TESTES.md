@@ -140,3 +140,27 @@ Onze testes do serializador verificam BOM/cabeçalho, acentos, delimitadores/asp
 ## Correção do modo demo
 
 Três casos de integração verificam preparação idempotente e não destrutiva, entrada como Carlos, bloqueio quando há segredo real e mensagens para perfil ausente/desativado. Um caso de interface verifica retorno de erro ao selecionar Carlos. No Chrome, Carlos foi selecionado e a interface exibiu Carlos Leitor/VIEWER, sem cadastro de tarefas ou atalhos administrativos.
+
+### Meu dia e duplicação — 09/11/2026
+
+Suíte: **343 testes em 20 arquivos**. `my-day-page.test.tsx` cobre filtro acessível, grupos, contadores, estados vazios, consulta completa, parâmetros inválidos e ausência de sessão. A integração com SQLite em `task-actions.test.ts` verifica limites de dias na virada do ano, exclusão de tarefas finalizadas/arquivadas e de outras unidades, filtro por ponto focal, limite de 25 com total real e acesso de visualizadores. `task-ui.test.tsx` cobre duplicação de tarefa finalizada, dados preenchidos, prazo obrigatório, falha recuperável, cancelamento e permissões. O cadastro existente continua responsável pela autorização e auditoria da cópia.
+
+Validação automatizada: lint, TypeScript e build de produção com webpack. Testes de interface usam JSDOM; esta entrega não incluiu inspeção visual em navegador real.
+
+### Filtros favoritos — 09/11/2026
+
+Suíte: **359 testes em 22 arquivos**. `saved-task-filters.test.ts` verifica preservação dos filtros, remoção da paginação, destinos locais, descarte de dados inválidos, nomes duplicados, limite e chaves separadas por usuário/unidade. `saved-filters-ui.test.tsx` verifica salvar, remontar, reaplicar por link e remover; separação de perfis/unidades; falha de armazenamento com nova tentativa; mudanças entre abas e bloqueio de filtros inválidos.
+
+Verificações: lint, TypeScript e build de produção com webpack. A interface foi testada em JSDOM; sem inspeção visual em navegador real nesta entrega.
+
+### Comentários nas tarefas — 09/11/2026
+
+Suíte: **369 testes em 23 arquivos**. A integração com SQLite em `task-actions.test.ts` cobre autoria, persistência independente da auditoria, limites de texto, permissões de publicação/leitura, isolamento por unidade, tarefa inexistente, ausência de sessão, arquivamento, recorrência e paginação estável. `task-comments-ui.test.tsx` cobre carregamento sob demanda, apresentação segura de texto/autor/data, publicação com atualização, falha preservando rascunho, bloqueio de envio repetido enquanto aguarda o servidor, leitura sem formulário, nova tentativa e navegação entre páginas.
+
+Verificações: lint, TypeScript, build com webpack e `db:check` sem diferenças. Migração local aplicada após backup verificado; os testes usam bancos temporários. Interface verificada com JSDOM, sem inspeção visual em navegador real nesta entrega.
+
+### Central de pendências — 09/11/2026
+
+Suíte: **378 testes em 24 arquivos**. A integração SQLite em `task-actions.test.ts` cobre categorias sem sobreposição, limites civis na virada do ano, exclusão de outras unidades e tarefas arquivadas/validadas, contagens por perfil, bloqueio da categoria de validação, ausência de sessão, paginação estável e atualização após conclusão/arquivamento. `pending-center-page.test.tsx` cobre navegação por categoria, contadores, paginação, vazio, acesso restrito, ausência de sessão, normalização dos parâmetros e atualização manual.
+
+Verificações: lint, TypeScript, build de produção com webpack e `git diff --check`. Testes de interface em JSDOM; sem inspeção visual em navegador real nesta entrega. Nenhuma migração de banco.

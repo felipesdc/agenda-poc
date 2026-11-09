@@ -1,3 +1,4 @@
+import SavedTaskFilters from "@/components/SavedTaskFilters";
 import ExportTasksButton from "@/components/ExportTasksButton";
 import Link from "next/link";
 import { getTaskListData } from "@/lib/task-list";
@@ -32,6 +33,7 @@ export default async function TaskListPage({ searchParams }: { searchParams: Pro
       <p className="text-sm text-gray-600 md:col-span-2">A opção de vencidas prioriza pendências com prazo anterior a hoje, de qualquer mês ou ano, respeitando também o ponto focal e o intervalo informados.</p>
       <div className="flex flex-wrap items-center gap-4 md:col-span-2"><button type="submit" className="rounded bg-blue-700 px-4 py-2 text-white">Aplicar filtros</button><Link href="/tarefas" className="text-blue-700 dark:text-blue-300 underline">Limpar filtros</Link></div>
     </form>
+    <SavedTaskFilters key={`${data.currentUser.id}:${data.currentUser.unitId}`} userId={data.currentUser.id} unitId={data.currentUser.unitId} filters={filters} />
     <p role="status">{data.total} {data.total === 1 ? "tarefa encontrada" : "tarefas encontradas"} · Página {data.page} de {data.pages}</p>
     {!filters.errors.length && <ExportTasksButton href={taskExportUrl(filters)} />}
     <TaskList tasks={data.tasks} currentUser={data.currentUser} employees={data.employees} />

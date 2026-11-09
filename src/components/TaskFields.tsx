@@ -8,13 +8,14 @@ import type { TaskFieldErrors } from "@/lib/task-input";
 type TaskFieldsProps = {
   employees: Employee[];
   task?: Task & { focalPoints: Employee[] };
+  clearDueDate?: boolean;
   errors?: TaskFieldErrors;
   disabled?: boolean;
 };
 
 const inputClass = "w-full p-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-surface focus:ring-2 focus:ring-blue-500 outline-none";
 
-export default function TaskFields({ employees, task, errors, disabled }: TaskFieldsProps) {
+export default function TaskFields({ employees, task, errors, disabled, clearDueDate = false }: TaskFieldsProps) {
   const id = useId();
   const fieldsRef = useRef<HTMLFieldSetElement>(null);
   useEffect(() => {
@@ -24,7 +25,7 @@ export default function TaskFields({ employees, task, errors, disabled }: TaskFi
   }, [errors]);
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
-  const [dueDate, setDueDate] = useState(task ? new Date(task.dueDate).toISOString().slice(0, 10) : "");
+  const [dueDate, setDueDate] = useState(task && !clearDueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : "");
   const [frequency, setFrequency] = useState<string>(task?.frequency ?? "NONE");
   const [focalPoints, setFocalPoints] = useState<number[]>(task?.focalPoints.map((employee) => employee.id) ?? []);
 

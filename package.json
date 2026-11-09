@@ -15,9 +15,9 @@
     "db:check": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:unit": "vitest run tests/task-csv.test.ts tests/search-text.test.ts tests/task-list-params.test.ts tests/task-input.test.ts tests/archive-input.test.ts tests/calendar-params.test.ts tests/auth-settings.test.ts tests/frequency.test.ts tests/task-status.test.ts",
+    "test:unit": "vitest run tests/saved-task-filters.test.ts tests/task-csv.test.ts tests/search-text.test.ts tests/task-list-params.test.ts tests/task-input.test.ts tests/archive-input.test.ts tests/calendar-params.test.ts tests/auth-settings.test.ts tests/frequency.test.ts tests/task-status.test.ts",
     "test:integration": "vitest run tests/task-actions.test.ts tests/password-auth.test.ts tests/database-backup.test.ts",
-    "test:ui": "vitest run tests/task-ui.test.tsx tests/calendar-ui.test.tsx tests/auth-ui.test.tsx tests/user-management-ui.test.tsx tests/theme-ui.test.tsx tests/task-list-page.test.tsx tests/export-ui.test.tsx",
+    "test:ui": "vitest run tests/task-ui.test.tsx tests/calendar-ui.test.tsx tests/auth-ui.test.tsx tests/user-management-ui.test.tsx tests/theme-ui.test.tsx tests/task-list-page.test.tsx tests/export-ui.test.tsx tests/my-day-page.test.tsx tests/saved-filters-ui.test.tsx tests/task-comments-ui.test.tsx tests/pending-center-page.test.tsx",
     "demo:prepare": "node --import tsx scripts/prepare-demo.ts",
     "auth:provision": "node --import tsx scripts/provision-user.ts"
   },

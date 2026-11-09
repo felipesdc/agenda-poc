@@ -344,3 +344,41 @@ describe("abas e foco na edição", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Título"));
   });
 });
+
+describe("duplicação de tarefas", () => {
+  it("copia campos de tarefa finalizada, exige prazo e envia somente dados de criação", async () => {
+    const { user, onClose } = openModal({ status: "VALIDATED", frequency: "MONTHLY" });
+    await user.click(screen.getByRole("button", { name: "Duplicar tarefa" }));
+    expect(screen.getByRole("dialog", { name: "Duplicar tarefa" })).toBeTruthy();
+    expect(screen.getByLabelText("Título")).toHaveProperty("value", "Enviar remessa");
+    expect(screen.getByRole("textbox", { name: "Detalhes" })).toHaveProperty("value", "Conferir os documentos");
+    expect(screen.getByLabelText("Periodicidade")).toHaveProperty("value", "MONTHLY");
+    expect(screen.getByRole("checkbox", { name: "Alice Gestora" })).toHaveProperty("checked", true);
+    expect(screen.getByLabelText("Prazo final")).toHaveProperty("value", "");
+    await user.click(screen.getByRole("button", { name: "Criar cópia" }));
+    expect(actions.createTask).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Prazo final"), { target: { value: "2026-12-10" } });
+    await user.click(screen.getByRole("button", { name: "Criar cópia" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(Object.fromEntries(actions.createTask.mock.calls[0][1])).toEqual({ title: "Enviar remessa", description: "Conferir os documentos", frequency: "MONTHLY", focalPoints: "1001", dueDate: "2026-12-10" });
+    expect(actions.updateTask).not.toHaveBeenCalled();
+  });
+
+  it("preserva campos após falha e permite cancelar sem alterar a origem", async () => {
+    actions.createTask.mockResolvedValue({ success: false, message: "Falha ao criar" });
+    const { user } = openModal();
+    await user.click(screen.getByRole("button", { name: "Duplicar tarefa" }));
+    fireEvent.change(screen.getByLabelText("Prazo final"), { target: { value: "2026-12-10" } });
+    await user.click(screen.getByRole("button", { name: "Criar cópia" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Falha ao criar");
+    expect(screen.getByLabelText("Prazo final")).toHaveProperty("value", "2026-12-10");
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByText("Enviar remessa")).toBeTruthy();
+    expect(actions.updateTask).not.toHaveBeenCalled();
+  });
+
+  it.each([{ ...operator, role: "VIEWER" as const }, { ...operator, unitId: "other" }])("oculta duplicação para perfil sem permissão ou outra unidade", (actor) => {
+    openModal({}, actor);
+    expect(screen.queryByRole("button", { name: "Duplicar tarefa" })).toBeNull();
+  });
+});

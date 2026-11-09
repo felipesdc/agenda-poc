@@ -30,6 +30,8 @@ async function mutate(
     const message = await prisma.$transaction((tx) => operation(tx, user));
     revalidatePath("/");
     revalidatePath("/tarefas");
+    revalidatePath("/meu-dia");
+    revalidatePath("/pendencias");
     revalidatePath("/validacoes");
     return { success: true, message, errors: {} };
   } catch (error) {

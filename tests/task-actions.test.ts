@@ -952,7 +952,7 @@ describe("exportação CSV", () => {
     expect((await response.text()).split("\r\n")).toHaveLength(28);
   });
   it("recusa exportação acima do limite em vez de truncar", async () => {
-    vi.spyOn(prisma.task, "count").mockResolvedValueOnce(5001);
+    await prisma.task.createMany({ data: Array.from({ length: 5001 }, (_, index) => ({ title: `Limite ${index}`, unitId: "unit-test", createdById: "operator-test", dueDate: new Date(2026, 0, 1) })) });
     const response = await exportCsv(); expect(response.status).toBe(413);
     expect((await response.json()).message).toContain("Refine os filtros");
   });
@@ -982,5 +982,124 @@ describe("preparação dos perfis de demonstração", () => {
     await prisma.user.update({ where: { id: "viewer-test" }, data: { isActive: false } });
     try { expect((await actions.switchUser("viewer@test.invalid"))?.message).toContain("desativada"); }
     finally { await prisma.user.update({ where: { id: "viewer-test" }, data: { isActive: true } }); }
+  });
+});
+
+describe("Meu dia", () => {
+  const now = new Date("2026-12-31T15:00:00-03:00");
+  async function daily(focal: number | null = null) { return (await import("../src/lib/my-day")).getMyDayData(focal, now); }
+  it("separa limites civis sem sobreposição, exclui finalizadas, arquivadas e outra unidade", async () => {
+    for (const [title, date] of [["Vencida", "2026-12-30T23:59:59-03:00"], ["Hoje início", "2026-12-31T00:00:00-03:00"], ["Hoje fim", "2026-12-31T23:59:59-03:00"], ["Amanhã", "2027-01-01T00:00:00-03:00"], ["Sétimo dia", "2027-01-07T23:59:59-03:00"], ["Fora", "2027-01-08T00:00:00-03:00"]]) {
+      await prisma.task.create({ data: { title, dueDate: new Date(date), unitId: "unit-test", createdById: "operator-test" } });
+    }
+    for (const data of [{ status: "COMPLETED" as const }, { status: "VALIDATED" as const }, { archivedAt: now }, { unitId: "unit-other" }]) await prisma.task.create({ data: { title: "Oculta", dueDate: now, unitId: "unit-test", createdById: "operator-test", ...data } });
+    const result = await daily();
+    expect(result.groups.map((group) => group.tasks.map((task) => task.title))).toEqual([["Vencida"], ["Hoje início", "Hoje fim"], ["Amanhã", "Sétimo dia"]]);
+    expect(result.groups.map((group) => group.total)).toEqual([1, 2, 2]);
+  });
+  it("filtra ponto focal, limita detalhes a 25 e mantém total e link completo", async () => {
+    for (let index = 0; index < 27; index++) await prisma.task.create({ data: { title: `Tarefa ${index}`, dueDate: now, unitId: "unit-test", createdById: "operator-test", focalPoints: { connect: { id: 1001 } } } });
+    const group = (await daily(1001)).groups[1];
+    expect(group.total).toBe(27); expect(group.tasks).toHaveLength(25);
+    expect(Object.fromEntries(new URL(group.href, "http://localhost").searchParams)).toEqual({ status: "PENDING", from: "2026-12-31", to: "2026-12-31", focalPoint: "1001" });
+    expect((await daily(1002)).groups.map((group) => group.total)).toEqual([0, 0, 0]);
+  });
+  it("permite leitura sem diretório de edição e não retorna dados sem sessão", async () => {
+    await create({ dueDate: "2026-12-31", focalPoints: ["1001"] });
+    context.cookies.set("userId", "viewer-test");
+    const result = await daily(); expect(result.groups[1].total).toBe(1); expect(result.employees).toEqual([]); expect(result.focalOptions).toEqual([{ id: 1001, name: "Ponto focal A" }]);
+    context.cookies.clear(); expect(await daily()).toMatchObject({ currentUser: null, groups: [], employees: [], focalOptions: [] });
+  });
+});
+
+describe("comentários das tarefas", () => {
+  async function comments() { return import("../src/actions/task-comments"); }
+  it("publica texto com autor, sem alterar tarefa ou histórico automático", async () => {
+    const task = await create(); const api = await comments();
+    expect(await api.addTaskComment(task.id, "  Revisão concluída.\nAguardando retorno.  ")).toMatchObject({ success: true });
+    const page = await api.getTaskComments(task.id);
+    expect(page).toMatchObject({ success: true, total: 1, page: 1, pages: 1 });
+    expect(page.comments[0]).toMatchObject({ body: "Revisão concluída.\nAguardando retorno.", authorName: "Operador" });
+    expect(Object.keys(page.comments[0]).sort()).toEqual(["authorName", "body", "createdAt", "id"]);
+    expect(await prisma.taskHistory.count({ where: { taskId: task.id } })).toBe(1);
+    expect(await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).toMatchObject({ status: "PENDING" });
+  });
+  it("recusa vazios e excesso, aceita limite e trata HTML como texto", async () => {
+    const task = await create(); const api = await comments();
+    for (const body of ["", " \n ", "a".repeat(2001)]) expect((await api.addTaskComment(task.id, body)).success).toBe(false);
+    expect((await api.addTaskComment(task.id, "a".repeat(2000))).success).toBe(true);
+    expect((await api.addTaskComment(task.id, "<script>alert(1)</script>")).success).toBe(true);
+    expect((await api.getTaskComments(task.id)).total).toBe(2);
+  });
+  it("permite conclusão e validação sem copiar comentários para a recorrência", async () => {
+    const task = await create({ frequency: "MONTHLY" }); const api = await comments();
+    await actions.completeTask(task.id);
+    expect((await api.addTaskComment(task.id, "Após conclusão")).success).toBe(true);
+    context.cookies.set("userId", "admin-test"); await actions.validateTask(task.id);
+    expect((await api.addTaskComment(task.id, "Após validação")).success).toBe(true);
+    const next = await prisma.task.findFirstOrThrow({ where: { sourceTaskId: task.id } });
+    expect((await api.getTaskComments(next.id)).total).toBe(0);
+    await actions.archiveTask(task.id, "Arquivada para teste");
+    expect((await api.addTaskComment(task.id, "Proibido")).success).toBe(false);
+    expect((await api.getTaskComments(task.id)).total).toBe(2);
+  });
+  it("visualizador lê sem publicar; outra unidade e sessão ausente não acessam", async () => {
+    const task = await create(); const api = await comments(); await api.addTaskComment(task.id, "Interno");
+    context.cookies.set("userId", "viewer-test");
+    expect((await api.getTaskComments(task.id)).total).toBe(1);
+    expect((await api.addTaskComment(task.id, "Negado")).success).toBe(false);
+    for (const actor of ["other-admin", "missing"]) {
+      context.cookies.set("userId", actor);
+      expect(await api.getTaskComments(task.id)).toMatchObject({ success: false, comments: [], total: 0 });
+      expect((await api.addTaskComment(task.id, "Negado")).success).toBe(false);
+    }
+    context.cookies.clear(); expect((await api.getTaskComments(task.id)).success).toBe(false);
+    expect(await prisma.taskComment.count()).toBe(1);
+  });
+  it("pagina com ordem estável e limita páginas inválidas", async () => {
+    const task = await create(); const api = await comments();
+    await prisma.taskComment.createMany({ data: Array.from({ length: 22 }, (_, i) => ({ id: `comment-${String(i).padStart(2, "0")}`, body: `Mensagem ${i}`, taskId: task.id, userId: "operator-test", authorName: "Operador", createdAt: new Date("2026-11-09T12:00:00Z") })) });
+    const first = await api.getTaskComments(task.id); const last = await api.getTaskComments(task.id, 999);
+    expect(first).toMatchObject({ total: 22, pages: 2, page: 1 }); expect(first.comments).toHaveLength(20);
+    expect(last.page).toBe(2); expect(last.comments).toHaveLength(2);
+    expect(new Set([...first.comments, ...last.comments].map((item) => item.id)).size).toBe(22);
+    expect((await api.getTaskComments(task.id, NaN)).page).toBe(1);
+    expect((await api.getTaskComments("missing")).success).toBe(false);
+  });
+});
+
+describe("central de pendências", () => {
+  const now = new Date("2026-12-31T15:00:00-03:00");
+  async function center(category: import("../src/lib/pending-center").PendingCategory = "all", page = 1) {
+    const data = await (await import("../src/lib/pending-center")).getPendingCenterData(category, page, now);
+    if (!data || data.restricted) throw new Error("Consulta indisponível");
+    return data;
+  }
+  it("reúne prazos sem sobreposição e mostra validações somente ao gestor", async () => {
+    for (const [title, dueDate] of [["Vencida", "2026-12-30T23:59:59-03:00"], ["Hoje", "2026-12-31T23:59:59-03:00"], ["Amanhã", "2027-01-01T00:00:00-03:00"], ["Dia 15", "2027-01-15T23:59:59-03:00"], ["Fora", "2027-01-16T00:00:00-03:00"]]) await prisma.task.create({ data: { title, dueDate: new Date(dueDate), unitId: "unit-test", createdById: "operator-test" } });
+    await prisma.task.create({ data: { title: "Validar futura", dueDate: new Date("2027-05-01T12:00:00Z"), status: "COMPLETED", unitId: "unit-test", createdById: "operator-test" } });
+    for (const override of [{ status: "VALIDATED" as const }, { archivedAt: now }, { unitId: "unit-other" }]) await prisma.task.create({ data: { title: "Oculta", dueDate: now, unitId: "unit-test", createdById: "operator-test", ...override } });
+    expect((await center()).counts.map((group) => [group.id, group.count])).toEqual([["all", 4], ["overdue", 1], ["today", 1], ["upcoming", 2]]);
+    expect((await center("upcoming")).tasks.map((task) => task.title)).toEqual(["Amanhã", "Dia 15"]);
+    context.cookies.set("userId", "admin-test");
+    const adminData = await center(); expect(adminData.total).toBe(5); expect(adminData.counts.at(-1)).toMatchObject({ id: "validation", count: 1 });
+    expect((await center("validation")).tasks.map((task) => task.title)).toEqual(["Validar futura"]);
+  });
+  it("restringe validações e diretório de edição e exige sessão", async () => {
+    await create({ dueDate: "2026-12-30" }); context.cookies.set("userId", "viewer-test");
+    const data = await center(); expect(data.total).toBe(1); expect(data.employees).toEqual([]); expect(data.counts.some((group) => group.id === "validation")).toBe(false);
+    const api = await import("../src/lib/pending-center");
+    expect(await api.getPendingCenterData("validation", 1, now)).toEqual({ restricted: true });
+    context.cookies.clear(); expect(await api.getPendingCenterData("all", 1, now)).toBeNull();
+  });
+  it("pagina com ordem estável e atualiza depois de concluir ou arquivar", async () => {
+    await prisma.task.createMany({ data: Array.from({ length: 26 }, (_, i) => ({ id: `pending-${String(i).padStart(2, "0")}`, title: `Pendência ${i}`, dueDate: now, unitId: "unit-test", createdById: "operator-test" })) });
+    const first = await center("today"); const last = await center("today", 9999);
+    expect(first.tasks).toHaveLength(25); expect(last.tasks).toHaveLength(1); expect(last.page).toBe(2);
+    expect(new Set([...first.tasks, ...last.tasks].map((task) => task.id)).size).toBe(26);
+    await actions.completeTask(first.tasks[0].id); expect((await center()).total).toBe(25);
+    expect(context.revalidate).toHaveBeenCalledWith("/pendencias");
+    context.cookies.set("userId", "admin-test"); expect((await center("validation")).total).toBe(1);
+    await actions.archiveTask(first.tasks[0].id, "Arquivada no teste"); expect((await center("validation")).total).toBe(0);
   });
 });

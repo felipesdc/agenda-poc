@@ -19,9 +19,10 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useActionState } from "react";
-import { updateTask, archiveTask, restoreTask, completeTask, validateTask } from "@/actions";
-import { canArchiveTask, canRestoreTask, canEditTask, canValidateTask } from "@/lib/permissions";
+import { createTask, updateTask, archiveTask, restoreTask, completeTask, validateTask } from "@/actions";
+import { canWriteTasks, canArchiveTask, canRestoreTask, canEditTask, canValidateTask } from "@/lib/permissions";
 import TaskFields from "./TaskFields";
+import TaskComments from "./TaskComments";
 import { frequencyLabels as frequencyMap } from "@/lib/task-frequency";
 import type { FormState } from "@/actions";
 import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ export default function TaskModal({
 }: TaskModalProps) {
   const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [isEditing, setIsEditing] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [pendingAction, setPendingAction] = useState<"archive" | "restore" | "complete" | "validate" | null>(null);
   const [showArchiveForm, setShowArchiveForm] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
@@ -60,7 +62,7 @@ export default function TaskModal({
 
   const [state, formAction, isPending] = useActionState(async (previous: FormState, data: FormData): Promise<FormState> => {
     try {
-      const result = await updateTask(task.id, previous, data);
+      const result = isDuplicating ? await createTask(previous, data) : await updateTask(task.id, previous, data);
       if (result.success) onClose();
       return result;
     } catch {
@@ -75,6 +77,7 @@ export default function TaskModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const dialogTitleId = useId();
   const editButtonRef = useRef<HTMLButtonElement>(null);
+  const duplicateButtonRef = useRef<HTMLButtonElement>(null);
   const wasEditing = useRef(false);
   const closeFromKeyboard = useEffectEvent(() => { if (!isBusy) onClose(); });
   useEffect(() => {
@@ -102,7 +105,7 @@ export default function TaskModal({
   }
   useEffect(() => {
     if (isEditing) dialogRef.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
-    else if (!isEditing && wasEditing.current) editButtonRef.current?.focus();
+    else if (!isEditing && wasEditing.current) (editButtonRef.current ?? duplicateButtonRef.current)?.focus();
     wasEditing.current = isEditing;
   }, [isEditing]);
 
@@ -147,7 +150,7 @@ export default function TaskModal({
         <div className={cn("px-6 pt-4 pb-0 border-b", headerColorClass)}>
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h3 id={dialogTitleId} className="text-lg font-bold text-gray-900">Tarefa</h3>
+              <h3 id={dialogTitleId} className="text-lg font-bold text-gray-900">{isDuplicating ? "Duplicar tarefa" : "Tarefa"}</h3>
               <span className="text-xs font-medium uppercase opacity-90 tracking-wider">
                 {{ PENDING: "Pendente", COMPLETED: "Concluída", VALIDATED: "Validada" }[task.status]}
               </span>
@@ -271,6 +274,8 @@ export default function TaskModal({
                   </div>
                 </form>}
 
+                <TaskComments key={task.id} taskId={task.id} canComment={canWriteTasks(currentUser) && currentUser?.unitId === task.unitId && !task.archivedAt} />
+
                 {/* --- NOVA ÁREA DE AÇÃO DO CICLO DE VIDA --- */}
                 <div className="py-2">
                   {canEditTask(currentUser, task) && (
@@ -326,7 +331,8 @@ export default function TaskModal({
                 </div>
                 {/* ------------------------------------------ */}
 
-                <div className="flex gap-3 pt-4 border-t mt-4">
+                <div className="flex flex-wrap gap-3 pt-4 border-t mt-4">
+                  {canWriteTasks(currentUser) && currentUser?.unitId === task.unitId && <button ref={duplicateButtonRef} type="button" disabled={isBusy} onClick={() => { setIsDuplicating(true); setIsEditing(true); }} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted">Duplicar tarefa</button>}
                   {canEditTask(currentUser, task) && <button
                     disabled={isBusy}
                     ref={editButtonRef} onClick={() => setIsEditing(true)}
@@ -355,13 +361,14 @@ export default function TaskModal({
             ) : (
               // MODO EDIÇÃO
               <form action={formAction} aria-busy={isPending} className="space-y-4">
-                <TaskFields task={task} employees={employees} errors={state.errors} disabled={isBusy} />
+                {isDuplicating && <p className="text-sm text-gray-600">Revise os dados e escolha um novo prazo. A cópia será pendente, com histórico próprio.</p>}
+                <TaskFields key={isDuplicating ? "copy" : "edit"} task={task} clearDueDate={isDuplicating} employees={employees} errors={state.errors} disabled={isBusy} />
                 {!state.success && state.message && <p role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm rounded">{state.message}</p>}
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
                     disabled={isBusy}
-                    onClick={() => setIsEditing(false)}
+                    onClick={() => { setIsEditing(false); setIsDuplicating(false); }}
                     className="flex-1 flex items-center justify-center gap-2 bg-gray-100 text-gray-700 hover:bg-gray-200 py-2 rounded-lg font-medium transition-colors"
                   >
                     <XCircle className="w-4 h-4" /> Cancelar
@@ -375,7 +382,7 @@ export default function TaskModal({
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <>
-                        <Save className="w-4 h-4" /> Salvar
+                        <Save className="w-4 h-4" /> {isDuplicating ? "Criar cópia" : "Salvar"}
                       </>
                     )}
                   </button>

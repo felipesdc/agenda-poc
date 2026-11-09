@@ -58,6 +58,7 @@ model User {
   unitId  String
   unit    Unit   @relation(fields: [unitId], references: [id])
   tasks   Task[] // Tarefas criadas por este user
+  comments TaskComment[]
   identity AuthUser?
   archivedTasks Task[] @relation("TaskArchivedBy")
 
@@ -98,6 +99,7 @@ model Task {
   nextTask     Task?   @relation("TaskRecurrence")
 
   // Relacionamento com o Histórico
+  comments    TaskComment[]
   history     TaskHistory[]
 
   // --- NOVO CAMPO: PONTOS FOCAIS ---
@@ -216,4 +218,18 @@ model UserAudit {
   activeAfter Boolean?
 
   @@index([unitId, timestamp])
+}
+
+// Conversa da tarefa, separada da auditoria automática.
+model TaskComment {
+  id         String   @id @default(cuid())
+  body       String
+  createdAt  DateTime @default(now())
+  authorName String
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt, id])
 }
