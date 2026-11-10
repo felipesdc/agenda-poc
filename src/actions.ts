@@ -32,6 +32,7 @@ async function mutate(
     revalidatePath("/tarefas");
     revalidatePath("/meu-dia");
     revalidatePath("/pendencias");
+    revalidatePath("/resumo");
     revalidatePath("/validacoes");
     return { success: true, message, errors: {} };
   } catch (error) {

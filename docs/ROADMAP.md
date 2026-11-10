@@ -258,3 +258,27 @@ Com login, autorização e integridade implementados, priorizar gestão de usuá
 - Consultas por unidade e perfil no servidor, sem arquivadas ou validadas; validações de todos os períodos.
 - Botão de atualização manual, horário da última consulta e revalidação da rota após ações de tarefas.
 - Sem migração, notificações externas ou rastreamento de leitura. “Meu dia” e fila de validação mantêm suas funções existentes.
+
+## Incremento 23 — Trabalho pessoal e interface (entregue)
+
+- Vínculo individual entre conta e ponto focal existente em tarefa da unidade, com unicidade global e registro administrativo; filtro pessoal em Meu dia.
+- Checklist de até 100 etapas em tarefas pendentes, leitura para visualizadores e tarefas finalizadas.
+- Favoritos persistidos por conta/unidade com opção explícita de importar dados locais.
+- Resumo mensal por prazo com acesso às listas, contagem de comentários e ajustes no cabeçalho, calendário e modal para telas menores.
+- Migração aditiva `20261110000000_personal_work`. Política completa de lotação de funcionários continua futura: o cadastro permanece global.
+
+## Incremento 24 — Planejamento anual (entregue)
+
+- Consulta por ano de conclusão, com filtro opcional pelo autor da conclusão e inclusão de tarefas arquivadas da unidade.
+- Seleção por página e revisão individual de prazo; criação transacional de até 25 cópias pendentes com dados e periodicidade preservados.
+- Histórico e registros de origem do lote, aviso de cópias anteriores do planejamento e de próxima ocorrência recorrente no ano de destino.
+- Chave de solicitação persistida impede repetição do mesmo lote em nova tentativa. Cópias manuais e recorrências além da próxima ocorrência não são identificadas automaticamente.
+- Migração aditiva `20261110010000_annual_planning`, com backup antes da aplicação local.
+
+## Incremento 25 — Substituição de ponto focal em lote (entregue)
+
+- Gestores e operadores podem consultar a prévia e substituir um ponto focal em tarefas pendentes, não arquivadas, da própria unidade com prazo a partir do dia atual.
+- A prévia apresenta todas as tarefas do lote, demais responsáveis e totais; cada confirmação processa até 200 tarefas e orienta repetir se necessário.
+- Os demais pontos focais são preservados, inclusive quando o substituto já está presente. A operação e o histórico de cada tarefa são gravados na mesma transação.
+- A confirmação revalida a prévia e recusa alterações concorrentes. O vínculo entre usuário e funcionário não é modificado.
+- Sem migração de banco; cadastro de funcionários permanece global, conforme a edição individual existente.

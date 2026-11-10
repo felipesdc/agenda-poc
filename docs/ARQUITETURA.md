@@ -8,7 +8,7 @@
 4. `src/actions.ts` revalida perfil, unidade e estado no servidor, independentemente dos botões apresentados. Cadastro e edição usam o schema compartilhado de `src/lib/task-input.ts`.
 5. Criação, edição, conclusão, validação, arquivamento e restauração gravam tarefa, vínculos e auditoria na mesma transação. `src/lib/audit.ts` recebe o cliente da transação e propaga falhas.
 
-Não há API REST dedicada. A página e as ações usam o singleton de `src/lib/prisma.ts`. Operações retornam mensagem e sucesso/erro; o modal fecha apenas com sucesso e impede ações simultâneas. Os campos preservam as entradas após falha.
+A rota GET `/api/tarefas/exportar` oferece CSV autenticado; `/api/auth/[...all]` atende à autenticação. Páginas e ações usam o singleton de `src/lib/prisma.ts`. Operações retornam mensagem e sucesso/erro; o modal fecha apenas com sucesso e impede ações simultâneas. Os campos preservam as entradas após falha.
 
 ## Modelo de dados
 
@@ -19,10 +19,17 @@ Não há API REST dedicada. A página e as ações usam o singleton de `src/lib/
 | `Task` | Prazo, estado, frequência, ciclo de vida e pontos focais; pertence à unidade e ao criador |
 | `Employee` | Cadastro global de funcionários, sem unidade; pontos focais podem existir sem acesso ao sistema |
 | `TaskHistory` | Ação, detalhe, data, tarefa e autor; inclui ARCHIVE/RESTORE e permanece acessível no arquivo |
+| `UserEmployeeLink` | Associação opcional e única entre conta e funcionário, usada na visão pessoal |
+| `TaskComment` | Mensagens de tarefas com autor e data, separadas da auditoria |
+| `TaskChecklistItem` | Etapas e progresso de uma tarefa |
+| `SavedTaskFilter` | Consulta favorita por usuário e unidade |
+| `UserAudit` | Histórico administrativo com snapshots e alterações de vínculo |
+| `AnnualPlanBatch`, `AnnualPlanItem` | Solicitação idempotente de planejamento e relação entre origens e cópias |
+| `AuthUser`, `AuthAccount`, `AuthSession`, `AuthVerification`, `AuthRateLimit` | Identidade, credenciais, sessões, verificação e limite de tentativas |
 
 `Task.sourceTaskId` é opcional e único: referencia a ocorrência de origem e permite no máximo uma sucessora por tarefa. Migrações preservam registros anteriores com esse campo nulo; não tentam inferir vínculos históricos. Excluir uma origem mantém sua sucessora, com `sourceTaskId` nulo (`ON DELETE SET NULL`). Índices cobrem unidade/prazo e tarefa/data do histórico.
 
-`User` e `Employee` são cadastros distintos, sem vínculo explícito. `UrgencyLevel` está declarado, mas não é usado.
+`User` e `Employee` são cadastros distintos, com vínculo opcional e individual em `UserEmployeeLink`. O gestor associa apenas pontos focais presentes em tarefas da própria unidade; a matrícula é única nesse vínculo. `UrgencyLevel` está declarado, mas não é usado.
 
 ## Permissões e ciclo de vida
 
@@ -157,3 +164,15 @@ GET /api/tarefas/exportar autentica a sessão, normaliza os mesmos parâmetros d
 Respostas usam private/no-store e nosniff; o download tem text/csv UTF-8 e Content-Disposition attachment. Filtros inválidos retornam 400, anônimo 401, excesso 413 e falhas 500 sem detalhes internos. ExportTasksButton controla processamento, mostra erros sem navegar para JSON e libera o objeto de download após iniciar a transferência.
 
 TasksToCsv emite BOM, ponto e vírgula, aspas em todas as células, aspas internas duplicadas e CRLF entre registros. Prefixos de fórmula/controles recebem apóstrofo. Essa medida é mitigação para a exportação, não uma garantia universal para reimportação/regravação em qualquer aplicativo de planilha.
+
+## Trabalho pessoal e planejamento
+
+`/meu-dia` consulta pendências vencidas, de hoje e dos próximos sete dias. A visão pessoal usa `UserEmployeeLink`; sem vínculo, retorna grupos vazios. `/pendencias` reúne vencidas, hoje e próximos 15 dias, além de conclusões para gestores. `/resumo` conta tarefas ativas por mês de prazo. Todas essas consultas usam a unidade da sessão; leitores não recebem o diretório global de edição.
+
+`TaskChecklistItem` pertence à tarefa; ações exigem perfil de escrita, unidade e tarefa pendente ativa. `TaskComment` pode ser criado por gestores/operadores em tarefas ativas, inclusive concluídas; leitura inclui tarefas arquivadas. Favoritos `SavedTaskFilter` são limitados por usuário/unidade, com nomes únicos e importação explícita dos dados locais anteriores.
+
+`/planejamento-anual` seleciona tarefas concluídas/validadas pelo ano de `completedAt` e, opcionalmente, pelo autor do evento `COMPLETE`. Tarefas arquivadas são incluídas. Até 25 origens são copiadas por solicitação; os prazos precisam pertencer ao ano de destino. Uma transação cria as tarefas, o histórico e `AnnualPlanBatch`/`AnnualPlanItem`. O par usuário/chave de solicitação e o hash do conteúdo impedem repetição involuntária da mesma solicitação. A consulta sinaliza lotes anteriores e a próxima ocorrência recorrente no ano de destino; não identifica todas as cópias manuais.
+
+## Substituição em lote
+
+`/substituir-ponto-focal` prepara até 200 tarefas pendentes e não arquivadas da unidade com prazo a partir do início do dia local. A prévia inclui total, responsáveis atuais e hash dos dados relevantes. A confirmação reconsulta na transação e recusa prévia alterada; atualiza os vínculos e o histórico de todas as tarefas atomicamente. O destino já presente é deduplicado e demais responsáveis são mantidos. A operação não altera `UserEmployeeLink`; novas recorrências seguem a regra normal da tarefa validada.

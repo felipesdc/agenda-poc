@@ -11,7 +11,7 @@ import {
   isSameDay,
 } from "date-fns";
 import { useState } from "react";
-import { getDayStatusColor, colorMap, cn } from "@/lib/utils";
+import { getDayStatusColor, getTaskStatusColor, taskStatusLabels, colorMap, cn } from "@/lib/utils";
 import { Employee, User } from "@prisma/client";
 import TaskModal, { type TaskWithHistory } from "./TaskModal";
 
@@ -54,7 +54,7 @@ export default function DashboardCalendar({
         {/* CORREÇÃO AQUI: 
          Adicionei o wrapper 'grid grid-cols-7' para forçar o layout de 7 colunas.
       */}
-        <div className="grid min-w-[560px] grid-cols-7 gap-1 text-center text-sm">
+        <div className="grid min-w-[350px] grid-cols-7 gap-1 text-center text-sm">
           {/* Cabeçalho dos dias da semana */}
           {weekDays.map((d) => (
             <div key={d} className="font-medium text-gray-400 py-2">
@@ -81,7 +81,7 @@ export default function DashboardCalendar({
               <div
                 key={idx}
                 className={cn(
-                  "min-h-28 w-full flex flex-col items-start justify-start p-2 rounded-md border transition-all relative group",
+                  "min-h-24 w-full min-w-0 flex flex-col items-start justify-start p-1 sm:p-2 rounded-md border transition-all relative group",
                   !isCurrentMonth ? "opacity-40 bg-gray-50" : "",
                   colorClass
                     ? colorClass
@@ -102,7 +102,9 @@ export default function DashboardCalendar({
                         e.stopPropagation(); // Evita cliques indesejados no pai
                         setSelectedTask(t);
                       }}
-                      className="text-[10px] truncate w-full text-left px-1 rounded hover:opacity-80 transition-opacity flex items-center gap-1"
+                      aria-label={t.title}
+                      aria-describedby={`calendar-info-${t.id}`}
+                      className="min-h-9 w-full min-w-0 rounded px-1 py-1 text-left text-xs hover:opacity-80 transition-opacity"
                       style={{
                         backgroundColor: colorClass
                           ? "rgba(255,255,255,0.25)"
@@ -116,7 +118,7 @@ export default function DashboardCalendar({
                           backgroundColor: colorClass ? "white" : "gray",
                         }}
                       />
-                      {t.title}
+                      <span className="block truncate font-medium">{t.title}</span><span id={`calendar-info-${t.id}`} className="block truncate text-[10px]">{format(new Date(t.dueDate), "dd/MM")} · {taskStatusLabels[getTaskStatusColor(new Date(t.dueDate), t.status)]}{t.focalPoints.length > 0 && ` · ${t.focalPoints.map((person) => person.name).join(", ")}`}{(t._count?.comments ?? 0) > 0 && ` · ${t._count?.comments} comentário(s)`}</span>
                     </button>
                   ))}
                 </div>

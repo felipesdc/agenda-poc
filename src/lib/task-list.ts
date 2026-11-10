@@ -23,7 +23,7 @@ export async function getTaskListData(filters: TaskListFilters) {
   const [tasks, employees] = await Promise.all([
     prisma.task.findMany({ where, skip: (page - 1) * TASK_LIST_PAGE_SIZE, take: TASK_LIST_PAGE_SIZE,
       orderBy: [{ dueDate: "asc" }, { id: "asc" }],
-      include: { archivedBy: { select: { name: true } }, history: { include: { user: true }, orderBy: { timestamp: "desc" } }, focalPoints: true },
+      include: { _count: { select: { comments: true } }, archivedBy: { select: { name: true } }, history: { include: { user: true }, orderBy: { timestamp: "desc" } }, focalPoints: true },
     }),
     canWriteTasks(currentUser) ? prisma.employee.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
   ]);

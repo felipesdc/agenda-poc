@@ -23,12 +23,14 @@ import { createTask, updateTask, archiveTask, restoreTask, completeTask, validat
 import { canWriteTasks, canArchiveTask, canRestoreTask, canEditTask, canValidateTask } from "@/lib/permissions";
 import TaskFields from "./TaskFields";
 import TaskComments from "./TaskComments";
+import TaskChecklist from "./TaskChecklist";
 import { frequencyLabels as frequencyMap } from "@/lib/task-frequency";
 import type { FormState } from "@/actions";
 import { getTaskStatusColor, colorMap, cn } from "@/lib/utils";
 
 // Tipo estendido para incluir o histórico que buscamos no page.tsx
 export type TaskWithHistory = Task & {
+  _count?: { comments: number };
   history: (TaskHistory & { user: User })[];
   focalPoints: Employee[]; // <--- Novo campo
   archivedBy?: { name: string } | null;
@@ -144,8 +146,8 @@ export default function TaskModal({
   const headerColorClass = colorMap[statusColorKey].card.split(" hover:")[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={dialogTitleId} tabIndex={-1} className="bg-surface rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90dvh] outline-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={dialogTitleId} tabIndex={-1} className="bg-surface rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[94dvh] sm:max-h-[90dvh] outline-none">
         {/* Header com Abas */}
         <div className={cn("px-6 pt-4 pb-0 border-b", headerColorClass)}>
           <div className="flex justify-between items-start mb-4">
@@ -198,7 +200,7 @@ export default function TaskModal({
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto" aria-busy={isBusy}>
+        <div className="p-4 sm:p-6 overflow-y-auto" aria-busy={isBusy}>
           {actionError && <p role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm rounded">{actionError}</p>}
           <div role="tabpanel" tabIndex={0} id={`${dialogTitleId}-details-panel`} aria-labelledby={`${dialogTitleId}-details-tab`} hidden={activeTab !== "details"}>{(
             /* --- CONTEÚDO DA ABA DETALHES --- */
@@ -274,6 +276,7 @@ export default function TaskModal({
                   </div>
                 </form>}
 
+                <TaskChecklist taskId={task.id} editable={canEditTask(currentUser, task)} />
                 <TaskComments key={task.id} taskId={task.id} canComment={canWriteTasks(currentUser) && currentUser?.unitId === task.unitId && !task.archivedAt} />
 
                 {/* --- NOVA ÁREA DE AÇÃO DO CICLO DE VIDA --- */}
@@ -362,7 +365,7 @@ export default function TaskModal({
               // MODO EDIÇÃO
               <form action={formAction} aria-busy={isPending} className="space-y-4">
                 {isDuplicating && <p className="text-sm text-gray-600">Revise os dados e escolha um novo prazo. A cópia será pendente, com histórico próprio.</p>}
-                <TaskFields key={isDuplicating ? "copy" : "edit"} task={task} clearDueDate={isDuplicating} employees={employees} errors={state.errors} disabled={isBusy} />
+                <TaskFields key={isDuplicating ? "copy" : "edit"} task={task} clearDueDate={isDuplicating} employees={isDuplicating ? Array.from(new Map([...employees, ...task.focalPoints].map((person) => [person.id, person])).values()).sort((a, b) => a.name.localeCompare(b.name)) : employees} errors={state.errors} disabled={isBusy} />
                 {!state.success && state.message && <p role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm rounded">{state.message}</p>}
                 <div className="flex gap-3 pt-2">
                   <button

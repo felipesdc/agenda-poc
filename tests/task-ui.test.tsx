@@ -382,3 +382,17 @@ describe("duplicação de tarefas", () => {
     expect(screen.queryByRole("button", { name: "Duplicar tarefa" })).toBeNull();
   });
 });
+
+it.each([
+  { status: "VALIDATED" as const, archivedAt: null },
+  { status: "PENDING" as const, archivedAt: new Date("2026-11-09T12:00:00Z") },
+])("preserva os focais ao duplicar sem diretório de edição: $status, arquivada=$archivedAt", async (state) => {
+  const user = userEvent.setup();
+  render(<TaskModal task={taskFixture(state)} isOpen onClose={vi.fn()} currentUser={admin} employees={[]} />);
+  await user.click(screen.getByRole("button", { name: "Duplicar tarefa" }));
+  expect(screen.getByRole("checkbox", { name: "Alice Gestora" })).toHaveProperty("checked", true);
+  fireEvent.change(screen.getByLabelText("Prazo final"), { target: { value: "2026-12-10" } });
+  await user.click(screen.getByRole("button", { name: "Criar cópia" }));
+  await waitFor(() => expect(actions.createTask).toHaveBeenCalledTimes(1));
+  expect(actions.createTask.mock.calls[0][1].getAll("focalPoints")).toEqual(["1001"]);
+});

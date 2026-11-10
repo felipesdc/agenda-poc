@@ -14,6 +14,7 @@ export default async function TaskListPage({ searchParams }: { searchParams: Pro
   return <main id="main-content" tabIndex={-1} className="mx-auto max-w-6xl space-y-6 p-4 text-gray-900 sm:p-8">
     <Link href="/" className="text-blue-700 dark:text-blue-300 underline">Voltar à agenda</Link>
     <h1 className="text-2xl font-bold">Lista de tarefas</h1>
+    {data.currentUser.role !== "VIEWER" && <Link href="/substituir-ponto-focal" className="inline-flex min-h-11 items-center rounded-lg border bg-surface px-4 py-2 text-sm font-medium hover:bg-muted">Substituir ponto focal em lote</Link>}
     <p>Consulte tarefas ativas da sua unidade em todos os períodos. Abra uma tarefa para ver detalhes e ações disponíveis.</p>
     <form action="/tarefas" method="GET" key={taskListUrl(filters)} className="grid gap-4 rounded-xl border bg-surface p-4 sm:p-6 md:grid-cols-[minmax(0,1fr)_14rem]" aria-label="Buscar e filtrar tarefas">
       <div><label htmlFor="task-search" className="block text-sm font-medium">Título ou descrição</label><input id="task-search" aria-describedby="task-search-help" type="search" name="q" maxLength={120} defaultValue={filters.q} className="mt-1 w-full rounded border p-2" /><p id="task-search-help" className="mt-1 text-xs text-gray-600">Busque com ou sem acentos. Ex.: relatorio encontra relatório.</p></div>

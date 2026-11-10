@@ -41,7 +41,7 @@ export async function getPendingCenterData(category: PendingCategory, requestedP
   const where: Prisma.TaskWhereInput = { ...scope, ...(category === "all" ? { OR: available.map((id) => conditions[id]) } : conditions[category]) };
   const [tasks, employees] = await Promise.all([
     prisma.task.findMany({ where, skip: (page - 1) * 25, take: 25, orderBy: [{ dueDate: "asc" }, { id: "asc" }],
-      include: { focalPoints: true, history: { include: { user: true }, orderBy: { timestamp: "desc" } } } }),
+      include: { _count: { select: { comments: true } }, focalPoints: true, history: { include: { user: true }, orderBy: { timestamp: "desc" } } } }),
     canWriteTasks(currentUser) ? prisma.employee.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
   ]);
   return { restricted: false as const, currentUser, tasks, employees, counts: [{ id: "all" as const, label: pendingLabels.all, count: counts.reduce((sum, group) => sum + group.count, 0) }, ...counts], total, pages, page, updatedAt: now };

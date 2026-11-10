@@ -89,6 +89,8 @@ function MiniCalendar({ monthIndex, year, byDay, selectedDay, onSelectDay, onSel
         const color = getTaskStatusColor(new Date(task.dueDate), task.status);
         return <li key={task.id}><button type="button" onClick={() => onSelectTask(task.id)} className="w-full rounded border border-gray-200 p-2 text-left hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-blue-600">
           <span className="block break-words text-sm font-medium text-gray-900">{task.title}</span>
+          <span className="block text-xs text-gray-600">Prazo: {format(new Date(task.dueDate), "dd/MM/yyyy")}{task.focalPoints.length > 0 && ` · ${task.focalPoints.map((person) => person.name).join(", ")}`}</span>
+          {(task._count?.comments ?? 0) > 0 && <span className="block text-xs text-gray-600">Comentários: {task._count?.comments}</span>}
           <span className="mt-1 flex items-center gap-1 text-xs text-gray-600"><span aria-hidden="true" className={cn("h-2 w-2 rounded-full", colorMap[color].dot)} />{taskStatusLabels[color]}</span>
         </button></li>;
       })}</ul>

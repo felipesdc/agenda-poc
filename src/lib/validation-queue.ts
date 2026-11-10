@@ -21,7 +21,7 @@ export async function getValidationQueue(q: string, requestedPage: number) {
   const page = Number.isSafeInteger(requestedPage) ? Math.min(Math.max(1, requestedPage), pages) : 1;
   const tasks = await prisma.task.findMany({ where, take: TASK_LIST_PAGE_SIZE, skip: (page - 1) * TASK_LIST_PAGE_SIZE,
     orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }, { id: "asc" }],
-    include: { history: { include: { user: true }, orderBy: { timestamp: "desc" } }, focalPoints: true },
+    include: { _count: { select: { comments: true } }, history: { include: { user: true }, orderBy: { timestamp: "desc" } }, focalPoints: true },
   });
   return { currentUser, tasks, total, page, pages };
 }

@@ -13,6 +13,10 @@ Prova de conceito de uma agenda de tarefas por unidade, com prazos, pontos focai
 - Permissões por perfil/unidade, transações com auditoria e recorrência sem duplicação.
 - Login por e-mail e senha, sessões verificadas no servidor, logout e provisionamento administrativo.
 - Troca de usuário de demonstração entre gestor, operador e visualizador, sem autenticação real configurada.
+- Meu dia, central de pendências, resumo mensal e fila de validação.
+- Busca, filtros, favoritos sincronizados por conta e exportação CSV.
+- Comentários, etapas, duplicação, planejamento anual e substituição de ponto focal em lote.
+- Administração de usuários, vínculo com ponto focal, auditoria e backup/restauração SQLite.
 
 **Estado:** prova de conceito com login real por senha e permissões por perfil/unidade. O cadastro público é fechado. O modo demonstração continua disponível apenas fora de produção e sem segredo de autenticação configurado. Veja a [configuração de autenticação](docs/AUTENTICACAO.md) antes de iniciar um piloto.
 
@@ -48,20 +52,22 @@ Para a demonstração local sem senha, mantenha `BETTER_AUTH_SECRET` vazio e use
 | Bob, operador (`OPERATOR`) | operador@banco.com |
 | Carlos, visualizador (`VIEWER`) | leitor@banco.com |
 
-O seed cria a unidade `U001`, três usuários e três funcionários fictícios. Não cria tarefas e pode ser executado novamente por usar `upsert`. No cadastro, selecione a periodicidade e os pontos focais; o padrão é sem repetição.
+O seed cria a unidade `U001`, três usuários e três funcionários fictícios; não cria tarefas. **Use-o apenas para preparar dados fictícios**: ao executá-lo novamente, ele redefine os perfis dos três usuários demo para seus valores originais. Para criar somente perfis demo ausentes sem alterar os existentes, use `npm run demo:prepare` nas condições descritas acima. No cadastro, selecione a periodicidade e os pontos focais; o padrão é sem repetição.
 
 `DATABASE_URL="file:./dev.db"` usa o arquivo `prisma/dev.db`. O repositório já contém esse banco versionado: faça uma cópia antes de aplicar migrações se houver dados que deseja preservar. Para conferir a situação, execute `npx prisma migrate status`. Não use `migrate reset` para preparar um banco com dados importantes.
 
 ## Atualizar uma instalação existente
 
-Os incrementos incluem migrações aditivas para recorrência, arquivamento, autenticação e índices. Antes de iniciar a versão atualizada, com a sua configuração `DATABASE_URL` carregada:
+Os incrementos incluem migrações aditivas para o ciclo de vida, autenticação, comentários, trabalho pessoal e planejamento. Preserve o `.env`, pare o servidor e faça backup do banco configurado antes de atualizar:
 
 ```bash
+npm run db:backup
 npm run db:prepare
-npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
+npm run db:status
+npm run db:check
 ```
 
-Configure o login conforme [AUTENTICACAO.md](docs/AUTENTICACAO.md). Para demonstração local sem segredo configurado, use `DEMO_MODE=true`; essa flag nunca habilita a sessão simulada em produção. A migração foi verificada em uma cópia do banco; o banco original do projeto não foi alterado automaticamente. Vínculos de origem só são registrados para novas ocorrências geradas.
+Reinicie o servidor após gerar o cliente Prisma. O preparo não executa o seed; evite executá-lo em bancos existentes porque ele redefine os perfis demo. Configure o login conforme [AUTENTICACAO.md](docs/AUTENTICACAO.md). Para demonstração local sem segredo, use `DEMO_MODE=true`; essa flag não habilita a sessão simulada em produção. Vínculos de recorrência anteriores à migração não são inferidos.
 
 ## Arquivar e restaurar
 
@@ -83,6 +89,7 @@ Operadores e visualizadores consultam o arquivo da própria unidade; arquivar e 
 | `npm run db:check` | Compara o banco configurado com o schema, falhando se houver diferenças |
 | `npm run typecheck` | Verificação de tipos |
 | `npm run auth:provision -- --email usuario@dominio.com` | Provisionar ou redefinir senha de usuário existente |
+| `npm run demo:prepare` | Criar apenas perfis demo ausentes sem alterar os existentes |
 | `npm run lint` | Análise estática com ESLint |
 | `npm test` | Toda a suíte: regras, integração com SQLite e componentes |
 | `npm run test:unit` | Validação, recorrência e classificação por prazo |
@@ -99,6 +106,8 @@ A suíte cobre validação, recorrências, classificação por prazo, CRUD e cic
 
 ## Documentação
 
+- [Guia de funcionalidades e permissões](docs/GUIA.md)
+- [Backup e recuperação](docs/OPERACAO.md)
 - [Login, provisionamento e sessões](docs/AUTENTICACAO.md)
 - [Arquitetura, entidades e regras atuais](docs/ARQUITETURA.md)
 - [Melhorias priorizadas e critérios de aceite](docs/ROADMAP.md)
@@ -159,7 +168,7 @@ A busca aceita correspondência parcial e normaliza acentos portugueses/latinos 
 
 O seletor **Tema**, no cabeçalho, oferece **Sistema**, **Claro** e **Escuro**. A preferência fica neste navegador; Sistema acompanha mudanças do sistema operacional. Fundos, textos, campos, bordas e cores de situação foram ajustados para os dois temas. A escolha é aplicada antes da hidratação para reduzir o clarão inicial.
 
-O cabeçalho mantém acesso ao calendário e à lista. A visão anual ocupa a largura disponível; a navegação de período se reorganiza em telas menores. O calendário mensal permite rolagem horizontal em telas estreitas e dias com mais tarefas podem crescer. No celular, o seletor de demonstração deixa de cobrir o conteúdo.
+O cabeçalho mantém acesso ao calendário, Meu dia, pendências, lista, resumo e planejamento anual. A visão anual ocupa a largura disponível; a navegação de período se reorganiza em telas menores. O calendário mensal permite rolagem horizontal em telas estreitas e dias com mais tarefas podem crescer. No celular, o seletor de demonstração deixa de cobrir o conteúdo.
 
 O modal anuncia um diálogo, recebe o foco, mantém Tab dentro dele e devolve o foco ao elemento de origem ao fechar. Escape fecha quando não há uma operação em andamento; a rolagem do fundo fica bloqueada. Há atalho **Pular para o conteúdo**, foco visível e respeito à preferência por movimento reduzido.
 
@@ -211,15 +220,15 @@ O seletor agora informa perfil inexistente, conta desativada e falha de conexão
 
 ### Meu dia e duplicação de tarefas
 
-Acesse **Meu dia** na navegação para acompanhar pendências da unidade em três grupos: vencidas, hoje e os próximos sete dias (amanhã até o sétimo dia, inclusive). O filtro por ponto focal vale para os três grupos. Cada grupo mostra até 25 tarefas, o total e um link para consultar todas na lista. Datas seguem o fuso do servidor, como nos filtros existentes; configure o ambiente com o fuso da unidade. A visão é da unidade, sem associação automática entre usuário e ponto focal.
+Acesse **Meu dia** na navegação para acompanhar pendências da unidade em três grupos: vencidas, hoje e os próximos sete dias (amanhã até o sétimo dia, inclusive). O filtro por ponto focal vale para os três grupos. Cada grupo mostra até 25 tarefas, o total e um link para consultar todas na lista. Datas seguem o fuso do servidor, como nos filtros existentes; configure o ambiente com o fuso da unidade. Selecione **Minhas tarefas** para filtrar pelo ponto focal associado à sua conta, ou **Toda a unidade** para consultar e filtrar a equipe. O gestor configura o vínculo na gestão de usuários; sem vínculo, a visão pessoal apresenta orientação e nenhum resultado.
 
-Nos detalhes de qualquer tarefa da própria unidade, administradores e operadores podem escolher **Duplicar tarefa**. O formulário preserva título, descrição, periodicidade e pontos focais, mas exige escolher um prazo. A confirmação usa o cadastro existente e cria uma tarefa pendente com novo identificador e histórico próprio, sem copiar validação, arquivamento ou vínculo de recorrência. Cancelar não altera a tarefa original. Visualizadores têm acesso de leitura ao Meu dia.
+Nos detalhes de qualquer tarefa da própria unidade, administradores e operadores podem escolher **Duplicar tarefa**. O formulário preserva título, descrição, periodicidade e pontos focais, mas exige escolher um prazo. A confirmação usa o cadastro existente e cria uma tarefa pendente com novo identificador e histórico próprio, sem copiar validação, arquivamento ou vínculo de recorrência. Cancelar não altera a tarefa original. Ao duplicar pela fila de validação ou pelo arquivo, o formulário apresenta os focais originais; para adicionar outra pessoa, edite a cópia pendente depois de criá-la. Visualizadores têm acesso de leitura ao Meu dia.
 
 ### Filtros favoritos
 
 Na lista de tarefas, aplique uma consulta e use **Filtros favoritos** para dar um nome e salvar. O favorito conserva busca, estado, ponto focal, intervalo de prazo e opção de vencidas; abre sempre na primeira página. Alterações ainda não aplicadas no formulário não são salvas. Datas do intervalo são fixas; “Todas as vencidas” usa o dia atual ao consultar.
 
-Cada usuário pode salvar até dez favoritos por unidade neste navegador. É possível removê-los e salvar uma consulta nova; nomes repetidos não sobrescrevem favoritos existentes. Os favoritos usam armazenamento local e não são sincronizados entre dispositivos nem incluídos no backup SQLite. Limpar os dados do navegador remove os favoritos. As consultas continuam sujeitas à sessão e ao isolamento por unidade no servidor.
+Cada usuário pode salvar até dez favoritos por unidade na própria conta. Os favoritos ficam no banco e estão disponíveis em outros dispositivos, sujeitos à sessão e ao isolamento por unidade. Favoritos da versão anterior permanecem no navegador e podem ser importados pelo botão **Importar favoritos locais**; duplicados e excedentes permanecem no navegador para revisão. Nomes repetidos não sobrescrevem favoritos existentes.
 
 ### Comentários nas tarefas
 
@@ -236,3 +245,31 @@ A entrada **Pendências** na navegação reúne alertas da unidade em `/pendenci
 Os contadores permitem filtrar a lista, que mostra 25 tarefas por página, ordenadas pelo prazo. Abra qualquer tarefa para usar os mesmos detalhes, comentários e ações das outras visões. Tarefas arquivadas e validadas ficam fora da central. Use **Atualizar pendências** para buscar mudanças de outras pessoas; não há envio de notificações nem atualização periódica automática. Para analisar validações por ordem de conclusão, o gestor pode abrir a fila de validação existente.
 
 A central é uma visão da unidade, complementar ao **Meu dia**, que mantém seu horizonte de sete dias e filtro por ponto focal. Não é necessária migração de banco.
+
+### Trabalho pessoal, etapas e resumo
+
+O gestor vincula contas a pontos focais em **Usuários da unidade**. O cadastro de funcionários é global; por isso, a associação é restrita a pontos focais já presentes em tarefas da unidade. Um ponto focal pode estar associado a uma única conta. A alteração é registrada no histórico administrativo.
+
+Nos detalhes de uma tarefa, **Ver etapas** permite acompanhar até 100 itens de checklist. Administradores e operadores podem adicionar, marcar e remover etapas enquanto a tarefa estiver pendente e não arquivada; outros perfis e tarefas finalizadas têm acesso de leitura. A conclusão da tarefa independe de todas as etapas estarem marcadas. Cópias e novas ocorrências não herdam etapas.
+
+O **Resumo** apresenta indicadores mensais por prazo da unidade, com links para a lista filtrada. Os cartões mostram contagens de comentários quando disponíveis. A navegação e o calendário foram ajustados para telas menores.
+
+A migração `20261110000000_personal_work` cria vínculos, checklist e favoritos em conta. Em outras instalações, faça backup, execute `npm run db:prepare` e reinicie a aplicação. O banco local foi migrado após backup.
+
+### Planejamento anual
+
+Em **Planejamento anual**, escolha o ano em que as tarefas foram concluídas, o ano de destino e, se desejar, quem registrou a conclusão. O levantamento usa a data de conclusão e o histórico da tarefa, inclui concluídas, validadas e arquivadas da unidade e informa quando não há data de conclusão em registros antigos. Usuários desativados continuam disponíveis no filtro.
+
+Selecione as tarefas da página, examine os dados e informe um novo prazo no ano de destino para cada uma. O lote aceita até 25 tarefas por vez. Administradores e operadores podem criar as cópias; visualizadores podem consultar. As cópias nascem pendentes, com título, descrição, periodicidade e pontos focais; histórico, comentários, etapas e vínculo de recorrência não são copiados. A periodicidade mantida poderá gerar nova ocorrência após validação.
+
+A tela avisa quando já existe cópia criada por este planejamento ou uma próxima ocorrência recorrente com prazo no ano escolhido. Cópias manuais e outras ocorrências não são detectadas automaticamente: confira a lista de tarefas antes de criar mais uma. Uma tentativa repetida com os mesmos dados usa a mesma chave, evitando que uma falha de conexão crie o mesmo lote duas vezes. Se trocar a seleção depois de uma falha, atualize a consulta e confira os avisos antes de prosseguir.
+
+A migração `20261110010000_annual_planning` registra os lotes e suas origens. Em outras instalações, faça um backup, execute `npm run db:prepare` e reinicie a aplicação.
+
+### Substituição de ponto focal em lote
+
+Na **Lista de tarefas**, gestores e operadores podem selecionar **Substituir ponto focal em lote**, escolher a pessoa atual e a substituta e consultar as tarefas antes de confirmar. A operação considera tarefas pendentes e não arquivadas da unidade, com prazo a partir de hoje, segundo o fuso do servidor. Tarefas vencidas, concluídas, validadas e arquivadas permanecem fora da operação.
+
+A prévia lista as tarefas e seus pontos focais atuais. Os demais pontos focais são preservados; se a pessoa substituta já participar da tarefa, ela não é duplicada. Cada confirmação atualiza até 200 tarefas; caso haja mais, consulte novamente para continuar com o próximo lote. Se as tarefas mudarem depois da prévia, a confirmação é recusada e é necessário consultar novamente. O histórico de cada tarefa registra a substituição, e uma falha de gravação reverte todo o lote.
+
+A pessoa substituta é escolhida no cadastro global de funcionários, como na edição individual de tarefas. A operação atualiza as tarefas existentes selecionadas pela regra de prazo e não altera o vínculo entre conta e ponto focal. Novas ocorrências recorrentes seguem a regra existente: herdam os pontos focais da ocorrência validada.

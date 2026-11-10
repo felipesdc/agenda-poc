@@ -12,7 +12,7 @@ export async function getAgendaData(rangeStart: Date, rangeEnd: Date, archived =
         archivedAt: archived ? { not: null } : null,
         ...(archived ? {} : { dueDate: { gte: rangeStart, lte: rangeEnd } }),
       },
-      include: { archivedBy: { select: { name: true } }, history: { include: { user: true }, orderBy: { timestamp: "desc" } }, focalPoints: true },
+      include: { _count: { select: { comments: true } }, archivedBy: { select: { name: true } }, history: { include: { user: true }, orderBy: { timestamp: "desc" } }, focalPoints: true },
       orderBy: archived ? { archivedAt: "desc" } : { dueDate: "asc" },
     }),
     // Employee é um cadastro global; visualizadores não recebem o diretório para edição.

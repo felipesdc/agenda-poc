@@ -50,7 +50,7 @@ export default function StatusCards({ tasks, currentUser, employees }: {
       {!grouped[category.color].length && <p className="text-sm text-gray-600">Nenhuma tarefa nesta faixa de prazo.</p>}
       <ul className="max-h-80 space-y-2 overflow-y-auto">{grouped[category.color].map((task) => <li key={task.id}>
         <button type="button" onClick={() => setSelectedId(task.id)} className="w-full rounded-md border border-gray-200 p-3 text-left text-gray-900 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-blue-600">
-          <span className="block break-words font-medium">{task.title}</span><span className="mt-1 block text-sm text-gray-600">Prazo: {format(new Date(task.dueDate), "dd/MM/yyyy")}</span>
+          <span className="block break-words font-medium">{task.title}</span><span className="mt-1 block text-sm text-gray-600">Prazo: {format(new Date(task.dueDate), "dd/MM/yyyy")}</span>{task.focalPoints.length > 0 && <span className="block text-sm text-gray-600">Pontos focais: {task.focalPoints.map((person) => person.name).join(", ")}</span>}{(task._count?.comments ?? 0) > 0 && <span className="block text-sm text-gray-600">Comentários: {task._count?.comments}</span>}
         </button>
       </li>)}</ul>
     </section>}

@@ -59,6 +59,8 @@ model User {
   unit    Unit   @relation(fields: [unitId], references: [id])
   tasks   Task[] // Tarefas criadas por este user
   comments TaskComment[]
+  employeeLink UserEmployeeLink?
+  savedFilters SavedTaskFilter[]
   identity AuthUser?
   archivedTasks Task[] @relation("TaskArchivedBy")
 
@@ -100,6 +102,7 @@ model Task {
 
   // Relacionamento com o Histórico
   comments    TaskComment[]
+  checklist   TaskChecklistItem[]
   history     TaskHistory[]
 
   // --- NOVO CAMPO: PONTOS FOCAIS ---
@@ -134,6 +137,61 @@ model Employee {
 
   // O "back-relation" para sabermos de quais tarefas ele é ponto focal
   tasks Task[]  
+  userLink UserEmployeeLink?
+}
+
+model UserEmployeeLink {
+  userId String @id
+  employeeId Int @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+}
+
+model SavedTaskFilter {
+  id String @id @default(cuid())
+  userId String
+  unitId String
+  name String
+  nameKey String
+  href String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, unitId, nameKey])
+  @@index([userId, unitId])
+}
+
+model TaskChecklistItem {
+  id String @id @default(cuid())
+  taskId String
+  title String
+  done Boolean @default(false)
+  createdAt DateTime @default(now())
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  @@index([taskId, createdAt, id])
+}
+
+// Registra lotes para impedir duplicação em uma nova tentativa da mesma solicitação.
+model AnnualPlanBatch {
+  id String @id @default(cuid())
+  userId String
+  unitId String
+  requestId String
+  payloadHash String
+  sourceYear Int
+  targetYear Int
+  createdAt DateTime @default(now())
+  items AnnualPlanItem[]
+  @@unique([userId, requestId])
+}
+
+model AnnualPlanItem {
+  id String @id @default(cuid())
+  batchId String
+  batch AnnualPlanBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sourceTaskId String
+  targetTaskId String
+  targetYear Int
+  @@unique([batchId, sourceTaskId])
+  @@index([sourceTaskId, targetYear])
 }
 
 // Identidades de autenticação separadas dos perfis e unidades do domínio.
@@ -216,6 +274,8 @@ model UserAudit {
   roleAfter   String
   activeBefore Boolean?
   activeAfter Boolean?
+  employeeBefore Int?
+  employeeAfter Int?
 
   @@index([unitId, timestamp])
 }

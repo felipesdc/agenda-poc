@@ -1103,3 +1103,168 @@ describe("central de pendências", () => {
     await actions.archiveTask(first.tasks[0].id, "Arquivada no teste"); expect((await center("validation")).total).toBe(0);
   });
 });
+
+describe("vínculo pessoal, etapas e favoritos sincronizados", () => {
+  it("restringe vínculo a gestor, unidade e ponto focal existente na unidade e filtra Meu dia", async () => {
+    const task = await create({ dueDate: "2026-12-31", focalPoints: ["1001"] });
+    const api = await import("../src/actions/employee-link");
+    expect((await api.setEmployeeLink("operator-test", 1001)).success).toBe(false);
+    context.cookies.set("userId", "admin-test");
+    try {
+      expect((await api.setEmployeeLink("other-admin", 1001)).success).toBe(false);
+      expect((await api.setEmployeeLink("operator-test", 1002)).success).toBe(false);
+      expect((await api.setEmployeeLink("operator-test", 1001)).success).toBe(true);
+      expect((await api.setEmployeeLink("viewer-test", 1001)).success).toBe(false);
+      const audit = await prisma.userAudit.findFirstOrThrow({ where: { userId: "operator-test", action: "EMPLOYEE_LINK" }, orderBy: { timestamp: "desc" } });
+      expect(audit.employeeAfter).toBe(1001);
+      context.cookies.set("userId", "operator-test");
+      const personal = await (await import("../src/lib/my-day")).getMyDayData(null, new Date("2026-12-31T15:00:00-03:00"), true);
+      expect(personal.groups[1].tasks.map((item) => item.id)).toContain(task.id);
+      context.cookies.set("userId", "viewer-test");
+      const noLink = await (await import("../src/lib/my-day")).getMyDayData(null, new Date("2026-12-31T15:00:00-03:00"), true);
+      expect(noLink.hasEmployeeLink).toBe(false); expect(noLink.groups.every((group) => group.total === 0)).toBe(true);
+    } finally { await prisma.userEmployeeLink.deleteMany({ where: { userId: "operator-test" } }); }
+  });
+  it("controla etapas por unidade e perfil, sem impedir conclusão", async () => {
+    const task = await create(); const api = await import("../src/actions/checklist");
+    expect((await api.changeChecklist(task.id, { operation: "add", title: "   " })).success).toBe(false);
+    expect((await api.changeChecklist(task.id, { operation: "add", title: " Revisar documentos " })).success).toBe(true);
+    const [item] = (await api.getChecklist(task.id)).items; expect(item).toMatchObject({ title: "Revisar documentos", done: false });
+    expect((await api.changeChecklist(task.id, { operation: "toggle", id: item.id, done: true })).success).toBe(true);
+    context.cookies.set("userId", "viewer-test"); expect((await api.getChecklist(task.id)).items[0].done).toBe(true); expect((await api.changeChecklist(task.id, { operation: "remove", id: item.id })).success).toBe(false);
+    context.cookies.set("userId", "other-admin"); expect((await api.getChecklist(task.id)).success).toBe(false); expect((await api.changeChecklist(task.id, { operation: "remove", id: item.id })).success).toBe(false);
+    context.cookies.set("userId", "operator-test"); expect((await actions.completeTask(task.id)).success).toBe(true); expect((await api.changeChecklist(task.id, { operation: "remove", id: item.id })).success).toBe(false);
+  });
+  it("sincroniza favoritos sem cruzar usuários e valida destinos", async () => {
+    const api = await import("../src/actions/saved-filters");
+    try {
+      expect((await api.addAccountFilter("Equipe", "/tarefas?status=PENDING&page=3")).success).toBe(true);
+      expect((await api.addAccountFilter("equipe", "/tarefas")).success).toBe(false);
+      expect((await api.addAccountFilter("Ataque", "https://example.org/tarefas")).success).toBe(false);
+      const saved = await api.getSavedTaskFilters(); expect(saved.items).toHaveLength(1); expect(saved.items[0].href).toBe("/tarefas?status=PENDING");
+      context.cookies.set("userId", "viewer-test"); expect((await api.getSavedTaskFilters()).items).toEqual([]); expect((await api.removeAccountFilter(saved.items[0].id)).success).toBe(false);
+      context.cookies.set("userId", "operator-test"); expect((await api.removeAccountFilter(saved.items[0].id)).success).toBe(true);
+      context.cookies.clear(); expect((await api.getSavedTaskFilters()).success).toBe(false);
+    } finally { await prisma.savedTaskFilter.deleteMany({ where: { userId: { in: ["operator-test", "viewer-test"] } } }); }
+  });
+});
+
+describe("planejamento anual", () => {
+  beforeEach(async () => { await prisma.annualPlanBatch.deleteMany(); });
+  const requestId = "2e3d1de6-8589-411f-a355-5d082bc1c08a";
+  async function source(overrides: { id: string; author?: string; unitId?: string; status?: "COMPLETED" | "VALIDATED"; completedAt?: Date | null; archivedAt?: Date | null; frequency?: "NONE" | "MONTHLY" }) {
+    const { author = "operator-test", ...values } = overrides;
+    return prisma.task.create({ data: { title: `Origem ${values.id}`, description: "Detalhes preservados", unitId: "unit-test", createdById: "operator-test", dueDate: new Date("2025-02-10T12:00:00Z"), status: "COMPLETED", completedAt: new Date("2025-12-31T20:00:00-03:00"), ...values,
+      focalPoints: { connect: { id: 1001 } }, history: { create: { userId: author, action: "COMPLETE" } } } });
+  }
+  function request(ids: string[], extra = {}) { return { requestId, sourceYear: 2025, targetYear: 2026, author: "operator-test", items: ids.map((id) => ({ id, dueDate: "2026-05-10" })), ...extra }; }
+  it("consulta ano da conclusão e responsável, inclusive arquivadas, com isolamento por unidade", async () => {
+    await source({ id: "plan-a", archivedAt: new Date(), status: "VALIDATED" });
+    await source({ id: "plan-b", author: "admin-test" });
+    await source({ id: "plan-c", completedAt: new Date("2026-01-01T00:00:00-03:00") });
+    await source({ id: "plan-d", unitId: "unit-other" });
+    await source({ id: "plan-e", completedAt: null });
+    const data = await (await import("../src/lib/annual-planning")).getAnnualPlanData({ sourceYear: 2025, targetYear: 2026, author: "operator-test", page: 1 });
+    expect(data?.tasks.map((task) => task.id)).toEqual(["plan-a"]); expect(data?.tasks[0].archivedAt).not.toBeNull();
+  });
+  it("cria lote atômico com campos preservados e histórico próprio, sem vínculo de recorrência", async () => {
+    await source({ id: "plan-a", frequency: "MONTHLY" }); await source({ id: "plan-b", archivedAt: new Date() });
+    const api = await import("../src/actions/annual-planning"); const result = await api.createAnnualPlan(request(["plan-a", "plan-b"]));
+    expect(result).toMatchObject({ success: true, count: 2, replay: false });
+    const batch = await prisma.annualPlanBatch.findUniqueOrThrow({ where: { userId_requestId: { userId: "operator-test", requestId } }, include: { items: true } });
+    const copies = await prisma.task.findMany({ where: { id: { in: batch.items.map((item) => item.targetTaskId) } }, include: { history: true, focalPoints: true, checklist: true, comments: true } });
+    expect(copies).toHaveLength(2);
+    expect(copies.find((copy) => copy.title === "Origem plan-a")).toMatchObject({ description: "Detalhes preservados", status: "PENDING", frequency: "MONTHLY", unitId: "unit-test", sourceTaskId: null, createdById: "operator-test" });
+    for (const copy of copies) { expect(copy.dueDate.toISOString()).toBe("2026-05-10T12:00:00.000Z"); expect(copy.focalPoints.map((p) => p.id)).toEqual([1001]); expect(copy.history).toEqual([expect.objectContaining({ action: "CREATE", detail: expect.stringContaining("planejamento anual") })]); expect(copy.checklist).toEqual([]); expect(copy.comments).toEqual([]); }
+    const data = await (await import("../src/lib/annual-planning")).getAnnualPlanData({ sourceYear: 2025, targetYear: 2026, author: "operator-test", page: 1 });
+    expect(data?.tasks.every((task) => task.previouslyPlanned)).toBe(true);
+  });
+  it("permite repetir a mesma requisição sem recriar e rejeita dados diferentes com a mesma chave", async () => {
+    await source({ id: "plan-a" }); const api = await import("../src/actions/annual-planning");
+    expect((await api.createAnnualPlan(request(["plan-a"]))).success).toBe(true);
+    expect(await api.createAnnualPlan(request(["plan-a"]))).toMatchObject({ success: true, replay: true, count: 1 });
+    expect((await api.createAnnualPlan(request(["plan-a"], { targetYear: 2027, items: [{ id: "plan-a", dueDate: "2027-05-10" }] }))).success).toBe(false);
+    expect(await prisma.annualPlanItem.count({ where: { sourceTaskId: "plan-a" } })).toBe(1);
+  });
+  it("recusa lote com origem de outra unidade, pessoa errada ou prazo inválido, sem criar nada", async () => {
+    await source({ id: "plan-a" }); await source({ id: "plan-other", unitId: "unit-other" });
+    const api = await import("../src/actions/annual-planning");
+    for (const input of [request(["plan-a", "plan-other"]), request(["plan-a"], { author: "admin-test" }), request(["plan-a"], { items: [{ id: "plan-a", dueDate: "2026-02-30" }] }), request(["plan-a"], { items: [{ id: "plan-a", dueDate: "2027-01-01" }] }), request(["plan-a", "plan-a"])]) expect((await api.createAnnualPlan(input)).success).toBe(false);
+    expect(await prisma.annualPlanBatch.count({ where: { requestId } })).toBe(0);
+  });
+  it("não permite criação a visualizador e reverte o lote se a auditoria falhar", async () => {
+    await source({ id: "plan-a" }); const api = await import("../src/actions/annual-planning");
+    context.cookies.set("userId", "viewer-test"); expect((await api.createAnnualPlan(request(["plan-a"]))).success).toBe(false);
+    context.cookies.set("userId", "operator-test");
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER reject_plan_audit BEFORE INSERT ON TaskHistory WHEN NEW.detail LIKE 'Criada pelo planejamento anual%' BEGIN SELECT RAISE(ABORT, 'audit failed'); END`);
+    try { expect((await api.createAnnualPlan(request(["plan-a"]))).success).toBe(false); expect(await prisma.annualPlanBatch.count({ where: { requestId } })).toBe(0); expect(await prisma.task.count({ where: { title: "Origem plan-a" } })).toBe(1); }
+    finally { await prisma.$executeRawUnsafe("DROP TRIGGER reject_plan_audit"); }
+  });
+});
+
+describe("substituição de ponto focal em lote", () => {
+  async function task(id: string, overrides: { unitId?: string; status?: "PENDING" | "COMPLETED" | "VALIDATED"; archivedAt?: Date | null; dueDate?: Date; focalIds?: number[] } = {}) {
+    const { focalIds = [1001], ...data } = overrides;
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(12, 0, 0, 0);
+    return prisma.task.create({ data: { id, title: `Tarefa ${id}`, createdById: "operator-test", unitId: "unit-test", dueDate: tomorrow, ...data, focalPoints: { connect: focalIds.map((employeeId) => ({ id: employeeId })) } } });
+  }
+  it("mostra e altera somente tarefas pendentes elegíveis da unidade, preservando demais pontos focais", async () => {
+    const future = await task("replace-future", { focalIds: [1001, 1002] });
+    const today = new Date(); today.setHours(12, 0, 0, 0); await task("replace-today", { dueDate: today });
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(12, 0, 0, 0);
+    await task("replace-past", { dueDate: yesterday }); await task("replace-completed", { status: "COMPLETED" });
+    await task("replace-validated", { status: "VALIDATED" }); await task("replace-archived", { archivedAt: new Date() });
+    await task("replace-other-unit", { unitId: "unit-other" });
+    const api = await import("../src/actions/focal-replacement"); const result = await api.previewFocalReplacement(1001, 1002);
+    expect(result.success).toBe(true); expect(result.preview?.tasks.map((t) => t.id)).toEqual(["replace-today", "replace-future"]);
+    expect(await api.applyFocalReplacement(1001, 1002, result.preview!.digest)).toMatchObject({ success: true, count: 2, remaining: 0 });
+    const updated = await prisma.task.findUniqueOrThrow({ where: { id: future.id }, include: { focalPoints: true, history: true } });
+    expect(updated.focalPoints.map((p) => p.id)).toEqual([1002]);
+    expect(updated.history).toEqual([expect.objectContaining({ action: "UPDATE", userId: "operator-test", detail: expect.stringContaining("Substituição em lote") })]);
+    for (const id of ["replace-past", "replace-completed", "replace-validated", "replace-archived", "replace-other-unit"]) expect((await prisma.task.findUniqueOrThrow({ where: { id }, include: { focalPoints: true } })).focalPoints.map((p) => p.id)).toEqual([1001]);
+    expect(context.revalidate).toHaveBeenCalledWith("/meu-dia");
+  });
+  it("preserva terceiro focal e não duplica o substituto já presente", async () => {
+    await prisma.employee.create({ data: { id: 1003, name: "Terceira pessoa", email: "third@test.invalid" } });
+    try {
+      await task("replace-three", { focalIds: [1001, 1002, 1003] });
+      const api = await import("../src/actions/focal-replacement"); const p = await api.previewFocalReplacement(1001, 1002);
+      expect((await api.applyFocalReplacement(1001, 1002, p.preview!.digest)).success).toBe(true);
+      const actual = await prisma.task.findUniqueOrThrow({ where: { id: "replace-three" }, include: { focalPoints: true } });
+      expect(actual.focalPoints.map((p) => p.id).sort()).toEqual([1002, 1003]);
+    } finally { await prisma.task.deleteMany({ where: { id: "replace-three" } }); await prisma.employee.delete({ where: { id: 1003 } }); }
+  });
+  it("bloqueia confirmação se dados ou conjunto mudarem após prévia", async () => {
+    await task("replace-before"); const api = await import("../src/actions/focal-replacement");
+    const first = await api.previewFocalReplacement(1001, 1002); await task("replace-after");
+    expect(await api.applyFocalReplacement(1001, 1002, first.preview!.digest)).toMatchObject({ success: false, message: expect.stringContaining("mudaram") });
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: "replace-before" }, include: { focalPoints: true } })).focalPoints.map((p) => p.id)).toEqual([1001]);
+    const second = await api.previewFocalReplacement(1001, 1002);
+    await prisma.task.update({ where: { id: "replace-before" }, data: { title: "Título atualizado" } });
+    expect((await api.applyFocalReplacement(1001, 1002, second.preview!.digest)).success).toBe(false);
+  });
+  it("recusa perfis sem escrita, valores inválidos e tarefas inexistentes", async () => {
+    await task("replace-auth"); const api = await import("../src/actions/focal-replacement"); const p = await api.previewFocalReplacement(1001, 1002);
+    expect((await api.previewFocalReplacement(1001, 1001)).success).toBe(false);
+    expect((await api.previewFocalReplacement(1001, 99999)).success).toBe(false);
+    context.cookies.set("userId", "viewer-test"); expect((await api.previewFocalReplacement(1001, 1002)).success).toBe(false); expect((await api.applyFocalReplacement(1001, 1002, p.preview!.digest)).success).toBe(false);
+    context.cookies.clear(); expect((await api.applyFocalReplacement(1001, 1002, p.preview!.digest)).success).toBe(false);
+    context.cookies.set("userId", "other-admin"); const other = await api.previewFocalReplacement(1001, 1002); expect(other.preview?.total).toBe(0); expect((await api.applyFocalReplacement(1001, 1002, p.preview!.digest)).success).toBe(false);
+  });
+  it("reverte todas as tarefas quando a gravação do histórico falha", async () => {
+    await task("replace-a"); await task("replace-b"); const api = await import("../src/actions/focal-replacement"); const p = await api.previewFocalReplacement(1001, 1002);
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER reject_focal_audit BEFORE INSERT ON TaskHistory WHEN NEW.detail LIKE '%Substituição em lote%' AND NEW.taskId = 'replace-b' BEGIN SELECT RAISE(ABORT, 'audit failed'); END`);
+    try {
+      expect((await api.applyFocalReplacement(1001, 1002, p.preview!.digest)).success).toBe(false);
+      for (const id of ["replace-a", "replace-b"]) { const current = await prisma.task.findUniqueOrThrow({ where: { id }, include: { focalPoints: true, history: true } }); expect(current.focalPoints.map((p) => p.id)).toEqual([1001]); expect(current.history).toEqual([]); }
+    } finally { await prisma.$executeRawUnsafe("DROP TRIGGER reject_focal_audit"); }
+  });
+  it("limita a prévia a 200 tarefas e permite continuar com outro lote", async () => {
+    for (let i = 0; i < 201; i++) await task(`replace-batch-${String(i).padStart(3, "0")}`);
+    const api = await import("../src/actions/focal-replacement"); const first = await api.previewFocalReplacement(1001, 1002);
+    expect(first.preview).toMatchObject({ total: 201 }); expect(first.preview?.tasks).toHaveLength(200);
+    expect(await api.applyFocalReplacement(1001, 1002, first.preview!.digest)).toMatchObject({ success: true, count: 200, remaining: 1 });
+    const next = await api.previewFocalReplacement(1001, 1002); expect(next.preview?.total).toBe(1);
+    expect(await api.applyFocalReplacement(1001, 1002, next.preview!.digest)).toMatchObject({ success: true, count: 1, remaining: 0 });
+  });
+});

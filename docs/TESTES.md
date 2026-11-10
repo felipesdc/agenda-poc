@@ -35,6 +35,14 @@ npm run test:watch
 | `tests/user-management-ui.test.tsx` | Situação da senha, bloqueio do próprio rebaixamento, preservação após erro, limpeza após sucesso e falha de conexão |
 | `tests/task-ui.test.tsx` | Envio e limpeza do cadastro, preservação dos campos após falha, erros de transporte e negócio, nova tentativa, edição, histórico, confirmação/cancelamento do arquivamento e restauração, bloqueio de ações concorrentes e botões conforme perfil/unidade/estado |
 | `tests/calendar-ui.test.tsx` | Janeiro com month=0, período atual, navegação mensal/anual, passagem de ano, alternância de visão, abertura/fechamento de detalhes, doze meses, indicadores e seletor de demonstração |
+| `tests/database-backup.test.ts` | Snapshot e restauração SQLite, integridade, dados WAL, sessões e proteção contra sobrescrita |
+| `tests/export-ui.test.tsx`, `tests/task-csv.test.ts` | Download, limites, formato, aspas e mitigação de fórmulas no CSV |
+| `tests/search-text.test.ts` | Normalização de acentos para buscas |
+| `tests/my-day-page.test.tsx`, `tests/pending-center-page.test.tsx`, `tests/summary-page.test.tsx` | Visões de trabalho, filtros, indicadores, paginação, escopo e estados vazios |
+| `tests/saved-task-filters.test.ts`, `tests/saved-filters-ui.test.tsx` | Validação, persistência de favoritos e importação de dados locais |
+| `tests/task-comments-ui.test.tsx`, `tests/checklist-ui.test.tsx` | Comentários, etapas, permissões de leitura e recuperação de erros |
+| `tests/annual-planning-params.test.ts`, `tests/annual-planning-ui.test.tsx` | Consulta, revisão, avisos e nova tentativa do planejamento anual |
+| `tests/focal-replacement-ui.test.tsx` | Prévia e confirmação da substituição de ponto focal em lote |
 
 Resultado após o incremento 18, em 07/11/2026: **333 testes aprovados em 19 arquivos**, sem casos `todo`.
 
@@ -164,3 +172,23 @@ Verificações: lint, TypeScript, build com webpack e `db:check` sem diferenças
 Suíte: **378 testes em 24 arquivos**. A integração SQLite em `task-actions.test.ts` cobre categorias sem sobreposição, limites civis na virada do ano, exclusão de outras unidades e tarefas arquivadas/validadas, contagens por perfil, bloqueio da categoria de validação, ausência de sessão, paginação estável e atualização após conclusão/arquivamento. `pending-center-page.test.tsx` cobre navegação por categoria, contadores, paginação, vazio, acesso restrito, ausência de sessão, normalização dos parâmetros e atualização manual.
 
 Verificações: lint, TypeScript, build de produção com webpack e `git diff --check`. Testes de interface em JSDOM; sem inspeção visual em navegador real nesta entrega. Nenhuma migração de banco.
+
+### Trabalho pessoal e interface — 10/11/2026
+
+Suíte completa: **384 testes em 26 arquivos**. A integração SQLite cobre vínculo de ponto focal por gestor e unidade, exclusividade, auditoria, visão pessoal sem vínculo, permissões e estados do checklist, além da separação e validação dos favoritos sincronizados. Testes de interface cobrem checklist, importação parcial dos favoritos locais, resumo mensal e acesso sem sessão. Verificações de lint, TypeScript, migração e build complementam a suíte. Os testes de interface utilizam JSDOM.
+
+### Planejamento anual — 10/11/2026
+
+Suíte completa: **393 testes em 28 arquivos**. Em `task-actions.test.ts`, os testes com SQLite cobrem ano e autor de conclusão, tarefas arquivadas, exclusão de outra unidade e registros sem data, cópia de campos, autoria e histórico, aviso de lote anterior, idempotência, validação de datas e fontes, autorização e reversão integral em falha da auditoria. `annual-planning-ui.test.tsx` cobre seleção, prazo obrigatório, avisos, envio, nova tentativa com os mesmos dados e leitura sem permissão de criação. `annual-planning-params.test.ts` cobre parâmetros e paginação.
+
+Lint, TypeScript, build de produção com webpack e `db:check` complementam a verificação. Os testes de interface usam JSDOM; esta entrega não incluiu inspeção visual em navegador real. A migração local foi aplicada após backup verificado.
+
+### Substituição de ponto focal em lote — 10/11/2026
+
+Suíte completa: **403 testes em 29 arquivos**. A integração SQLite cobre escopo por unidade, tarefas pendentes a partir de hoje, exclusão de vencidas/finalizadas/arquivadas, preservação de demais focais, substituto já presente, perfis sem permissão, prévia desatualizada, rollback integral em falha de histórico e processamento de 201 tarefas em dois lotes. `focal-replacement-ui.test.tsx` cobre prévia antes da confirmação, mudança dos selecionados, aviso de conflito, continuação de lotes e estado vazio.
+
+Verificações complementares: lint, TypeScript e build com webpack. Testes de interface em JSDOM; sem inspeção visual em navegador real nesta entrega. Não foi necessária migração.
+
+### Revisão da documentação e duplicação — 10/11/2026
+
+Suíte completa: **405 testes aprovados em 29 arquivos**. Dois casos adicionais verificam que a duplicação de tarefas validadas ou arquivadas preserva seus pontos focais mesmo quando a visão de origem não fornece o diretório de edição. Links locais da documentação foram conferidos, além de lint e build de produção com Webpack. Testes de interface permanecem em JSDOM.

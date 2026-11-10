@@ -11,8 +11,9 @@ npm ci
 cp .env.example .env
 npx prisma generate
 npx prisma migrate deploy
-npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
 ```
+
+Em um banco novo de desenvolvimento, o seed opcional cria os usuários e funcionários fictícios: `npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts`. Ele redefine os perfis demo quando executado novamente; não o use para atualizar bancos existentes.
 
 Em instalação existente, preserve o seu `.env` e apenas acrescente as variáveis novas. Faça backup do banco antes de aplicar migrações. O novo conjunto de tabelas é aditivo; a migração não altera usuários, perfis, unidades ou tarefas existentes.
 
@@ -55,7 +56,7 @@ Abra http://localhost:3000/login. Usuários autenticados veem o botão **Sair** 
 
 Execute o mesmo comando de provisionamento para o e-mail desejado. A nova senha substitui a anterior e todas as sessões desse usuário são revogadas na mesma transação. Só quem tem acesso administrativo ao servidor/banco deve executar esse comando.
 
-Este incremento não envia e-mail de recuperação e não oferece MFA. A interface orienta o usuário a contatar o administrador. Uma tela administrativa de usuários continua no roteiro.
+Este incremento não envia e-mail de recuperação e não oferece MFA. A interface orienta o usuário a contatar o administrador. Gestores administram os usuários da unidade em `/usuarios`.
 
 ## Sessões e autorização
 

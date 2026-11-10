@@ -19,6 +19,7 @@ export default function TaskList({ tasks, currentUser, employees, validationQueu
         <span className="block text-sm">Prazo: {format(new Date(task.dueDate), "dd/MM/yyyy")}</span>
         <span className="flex items-center gap-2 text-sm"><span aria-hidden="true" className={cn("h-2 w-2 rounded-full", colorMap[color].dot)} />{taskStatusLabels[color]}</span>
         {validationQueue && <span className="block text-sm text-gray-600">{task.completedAt ? `Concluída em: ${format(new Date(task.completedAt), "dd/MM/yyyy 'às' HH:mm")}` : "Data de conclusão não registrada"}</span>}
+        {(task._count?.comments ?? 0) > 0 && <span className="block text-sm text-gray-600">Comentários: {task._count?.comments}</span>}
         {task.focalPoints.length > 0 && <span className="block text-sm text-gray-600">Pontos focais: {task.focalPoints.map((employee) => employee.name).join(", ")}</span>}
       </button></li>;
     })}</ul>
